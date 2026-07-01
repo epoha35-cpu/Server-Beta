@@ -41,17 +41,16 @@ wss.on('connection', (ws) => {
       console.log('📨 Получено WS-сообщение:', data);
 
       if (data.type === 'auth') {
-        // Сохраняем userId для этого сокета
         ws.userId = data.userId;
         clients.set(data.userId, ws);
         console.log(`✅ Пользователь ${data.userId} подключен к WebSocket`);
       }
 
       if (data.type === 'new_message') {
-        // Сохраняем сообщение в БД
         const { chatId, fromUserId, text } = data;
         const messageId = Date.now().toString(36);
         
+        // Сохраняем в БД
         await pool.query(
           'INSERT INTO messages (id, chat_id, from_user_id, text) VALUES ($1, $2, $3, $4)',
           [messageId, chatId, fromUserId, text]
@@ -62,7 +61,7 @@ wss.on('connection', (ws) => {
           [chatId]
         );
 
-        // Находим получателя чата
+        // Находим получателя
         const chatResult = await pool.query(
           'SELECT user_id, partner_id FROM chats WHERE id = $1',
           [chatId]
@@ -70,10 +69,9 @@ wss.on('connection', (ws) => {
 
         if (chatResult.rows.length > 0) {
           const chat = chatResult.rows[0];
-          // Определяем получателя (не отправителя)
           const receiverId = chat.user_id === fromUserId ? chat.partner_id : chat.user_id;
           
-          // Отправляем сообщение получателю через WebSocket
+          // Отправляем сообщение получателю
           const receiverWs = clients.get(receiverId);
           if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
             receiverWs.send(JSON.stringify({
@@ -84,9 +82,21 @@ wss.on('connection', (ws) => {
               createdAt: new Date().toISOString()
             }));
             console.log(`📤 Сообщение отправлено пользователю ${receiverId}`);
-          } else {
-            console.log(`⚠️ Пользователь ${receiverId} не в сети`);
           }
+        }
+      }
+
+      if (data.type === 'new_chat') {
+        // Новый чат создан — уведомляем второго пользователя
+        const { userId, partnerId, chatId } = data;
+        const partnerWs = clients.get(partnerId);
+        if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
+          partnerWs.send(JSON.stringify({
+            type: 'new_chat',
+            chatId: chatId,
+            partnerId: userId
+          }));
+          console.log(`📤 Уведомление о новом чате отправлено пользователю ${partnerId}`);
         }
       }
     } catch (error) {
@@ -282,6 +292,8 @@ app.get('/api/chats', async (req, res) => {
 // 5. СОЗДАТЬ ЧАТ
 app.post('/api/chats', async (req, res) => {
   const { userId, partnerId } = req.body;
+  console.log('📝 Создание чата:', userId, '→', partnerId);
+  
   if (!userId || !partnerId) {
     return res.status(400).json({ error: 'Не указаны userId или partnerId' });
   }
@@ -298,14 +310,31 @@ app.post('/api/chats', async (req, res) => {
       return res.status(400).json({ error: 'Чат уже существует' });
     }
     const chatId = Date.now().toString(36);
+    
+    // Создаём чат для первого пользователя
     await pool.query(
       'INSERT INTO chats (id, user_id, partner_id) VALUES ($1, $2, $3)',
       [chatId, userId, partnerId]
     );
+    
+    // Создаём чат для второго пользователя
     await pool.query(
       'INSERT INTO chats (id, user_id, partner_id) VALUES ($1, $2, $3)',
       [chatId + '_mirror', partnerId, userId]
     );
+    
+    // Уведомляем второго пользователя через WebSocket
+    const partnerWs = clients.get(partnerId);
+    if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
+      partnerWs.send(JSON.stringify({
+        type: 'new_chat',
+        chatId: chatId + '_mirror',
+        partnerId: userId
+      }));
+      console.log(`📤 Уведомление о новом чате отправлено пользователю ${partnerId}`);
+    }
+    
+    console.log('✅ Чат создан:', chatId);
     res.json({ success: true, chatId });
   } catch (error) {
     console.error('❌ Ошибка создания чата:', error.message);
@@ -313,10 +342,10 @@ app.post('/api/chats', async (req, res) => {
   }
 });
 
-// 6. ОТПРАВИТЬ СООБЩЕНИЕ (HTTP, для обратной совместимости)
+// 6. ОТПРАВИТЬ СООБЩЕНИЕ (ЧЕРЕЗ HTTP, ТОЛЬКО ДЛЯ СОХРАНЕНИЯ)
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
-  console.log('📨 HTTP отправка:', { chatId, fromUserId, text: text?.substring(0, 30) });
+  console.log('📨 HTTP сохранение:', { chatId, fromUserId, text: text?.substring(0, 30) });
   
   if (!chatId || !fromUserId || !text) {
     return res.status(400).json({ error: 'Не все поля заполнены' });
