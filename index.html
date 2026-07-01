@@ -426,23 +426,42 @@
         // ОТПРАВКА СООБЩЕНИЯ
         // ============================================
         async function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text || !currentUser || !activeChatId) return;
+    const text = messageInput.value.trim();
+    if (!text || !currentUser || !activeChatId) return;
 
-            try {
-                await apiRequest('/messages', 'POST', {
-                    chatId: activeChatId,
-                    fromUserId: currentUser.id,
-                    text: text
-                });
+    try {
+        // Отправляем сообщение
+        await apiRequest('/messages', 'POST', {
+            chatId: activeChatId,
+            fromUserId: currentUser.id,
+            text: text
+        });
 
-                messageInput.value = '';
-                await loadChats();
-            } catch (error) {
-                console.error('Ошибка отправки:', error);
-                alert('Не удалось отправить сообщение');
-            }
+        // Очищаем поле
+        messageInput.value = '';
+
+        // Загружаем чаты заново
+        await loadChats();
+
+        // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ И ПОКАЗЫВАЕМ ЕГО
+        const updatedChat = chats.find(c => c.id === activeChatId);
+        if (updatedChat) {
+            renderMessages(updatedChat);
+        } else if (chats.length > 0) {
+            activeChatId = chats[0].id;
+            renderMessages(chats[0]);
         }
+
+        // Прокручиваем вниз
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 100);
+
+    } catch (error) {
+        console.error('Ошибка отправки:', error);
+        alert('Не удалось отправить сообщение');
+    }
+}
 
         // ============================================
         // СОЗДАНИЕ ЧАТА
