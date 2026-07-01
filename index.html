@@ -189,67 +189,72 @@
         // ============================================
         // WEBSOCKET
         // ============================================
-        function connectWebSocket() {
-            if (!currentUser) return;
+       // ============================================
+// WEBSOCKET (ИСПРАВЛЕННЫЙ)
+// ============================================
+function connectWebSocket() {
+    if (!currentUser) return;
+    
+    // Если уже есть открытый сокет — не создаём новый!
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('✅ WebSocket уже подключен');
+        return;
+    }
+    
+    // Если сокет закрывается или подключается — не создаём новый
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.CLOSING)) {
+        console.log('⏳ WebSocket уже подключается/закрывается');
+        return;
+    }
+    
+    console.log('🔌 Создаём новое WebSocket-подключение...');
+    ws = new WebSocket(WS_URL);
+    
+    ws.onopen = () => {
+        console.log('🔌 WebSocket подключен');
+        connectionStatus.textContent = '🟢 В сети';
+        ws.send(JSON.stringify({
+            type: 'auth',
+            userId: currentUser.id
+        }));
+    };
+    
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('📨 Получено WS-сообщение:', data);
             
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                return;
+            if (data.type === 'new_message') {
+                console.log('📨 НОВОЕ СООБЩЕНИЕ! Принудительно обновляем чаты...');
+                loadChats();
             }
             
-            ws = new WebSocket(WS_URL);
-            
-            ws.onopen = () => {
-                console.log('🔌 WebSocket подключен');
-                connectionStatus.textContent = '🟢 В сети';
-                ws.send(JSON.stringify({
-                    type: 'auth',
-                    userId: currentUser.id
-                }));
-            };
-            
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('📨 Получено WS-сообщение:', data);
-                    
-                    if (data.type === 'new_message') {
-                        console.log('📨 НОВОЕ СООБЩЕНИЕ! Принудительно обновляем чаты...');
-                        if (!isUpdating) {
-                            isUpdating = true;
-                            setTimeout(() => {
-                                loadChats();
-                                isUpdating = false;
-                            }, 300);
-                        }
-                    }
-                    
-                    if (data.type === 'new_chat') {
-                        console.log('📨 НОВЫЙ ЧАТ! Принудительно обновляем чаты...');
-                        if (!isUpdating) {
-                            isUpdating = true;
-                            setTimeout(() => {
-                                loadChats();
-                                isUpdating = false;
-                            }, 300);
-                        }
-                    }
-                } catch (error) {
-                    console.error('❌ Ошибка обработки WS:', error);
-                }
-            };
-            
-            ws.onclose = () => {
-                console.log('🔌 WebSocket отключен');
-                connectionStatus.textContent = '🔴 Не в сети';
-                ws = null;
-                setTimeout(connectWebSocket, 3000);
-            };
-            
-            ws.onerror = (error) => {
-                console.error('❌ WebSocket ошибка:', error);
-            };
+            if (data.type === 'new_chat') {
+                console.log('📨 НОВЫЙ ЧАТ! Принудительно обновляем чаты...');
+                loadChats();
+            }
+        } catch (error) {
+            console.error('❌ Ошибка обработки WS:', error);
         }
-
+    };
+    
+    ws.onclose = () => {
+        console.log('🔌 WebSocket отключен');
+        connectionStatus.textContent = '🔴 Не в сети';
+        // НЕ ОБНУЛЯЕМ ws сразу, чтобы избежать повторных подключений
+        setTimeout(() => {
+            if (ws && ws.readyState === WebSocket.CLOSED) {
+                ws = null;
+                // Подключаемся заново через 5 секунд
+                setTimeout(connectWebSocket, 5000);
+            }
+        }, 1000);
+    };
+    
+    ws.onerror = (error) => {
+        console.error('❌ WebSocket ошибка:', error);
+    };
+}
         // ============================================
         // ФУНКЦИИ API
         // ============================================
