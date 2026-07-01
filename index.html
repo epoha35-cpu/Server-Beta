@@ -797,17 +797,56 @@ function connectWebSocket() {
             if (e.key === 'Escape') hideContextMenu();
         });
 
-        // ============================================
-        // АВТООБНОВЛЕНИЕ (на случай, если WebSocket упал)
-        // ============================================
-        setInterval(() => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                console.log('🔄 Проверка соединения...');
-                if (currentUser) {
-                    connectWebSocket();
-                }
+        async function sendMessage() {
+    const text = messageInput.value.trim();
+    if (!text || !currentUser || !activeChatId) return;
+
+    // Проверяем WebSocket перед отправкой
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.log('🔄 WebSocket не подключен, подключаем...');
+        await connectWebSocket();
+        // Ждём подключения
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    try {
+        // Отправляем через WebSocket
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'new_message',
+                chatId: activeChatId,
+                fromUserId: currentUser.id,
+                text: text
+            }));
+            console.log('📤 Сообщение отправлено через WebSocket');
+        } else {
+            // Запасной вариант через HTTP
+            await apiRequest('/messages', 'POST', {
+                chatId: activeChatId,
+                fromUserId: currentUser.id,
+                text: text
+            });
+        }
+
+        messageInput.value = '';
+        await loadChats();
+
+        if (activeChatId) {
+            const updatedChat = chats.find(c => c.id === activeChatId);
+            if (updatedChat) {
+                renderMessages(updatedChat);
             }
-        }, 5000);
+        }
+
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 100);
+
+    } catch (error) {
+        console.error('Ошибка отправки:', error);
+        alert('Не удалось отправить сообщение');
+    }
+}
 
         // ============================================
         // ИНИЦИАЛИЗАЦИЯ
