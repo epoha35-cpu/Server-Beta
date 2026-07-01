@@ -8,32 +8,19 @@ const port = process.env.PORT || 3000;
 
 console.log('🚀 Запуск сервера...');
 
-// ===== ПРОВЕРКА ПЕРЕМЕННОЙ DATABASE_URL =====
-if (!process.env.DATABASE_URL) {
-  console.error('❌ ОШИБКА: Переменная DATABASE_URL не установлена!');
-  console.error('📌 Добавь её в Railway → Variables');
-  // Продолжаем без базы данных (для отладки)
-}
-
 // ===== ПОДКЛЮЧЕНИЕ К БАЗЕ =====
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   },
-  connectionTimeoutMillis: 5000, // Таймаут 5 секунд
-  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
 });
 
 // ===== МИДЛВАРЫ =====
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
-
-// ===== ПРОСТОЙ ТЕСТОВЫЙ ЭНДПОИНТ =====
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Сервер работает!' });
-});
 
 // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 async function getUsers() {
@@ -69,16 +56,10 @@ async function getMessages(chatId) {
 // ===== ИНИЦИАЛИЗАЦИЯ БАЗЫ =====
 async function initDatabase() {
   try {
-    console.log('🔄 Проверка подключения к базе данных...');
-    
-    // Проверяем подключение
-    const result = await pool.query('SELECT NOW()');
-    console.log('✅ Подключение к базе данных установлено!');
-    console.log('🕐 Время на сервере БД:', result.rows[0].now);
-    
-    // Создаем таблицы
-    console.log('🔄 Создание таблиц...');
-    
+    console.log('🔄 Проверка подключения...');
+    await pool.query('SELECT NOW()');
+    console.log('✅ Подключение к БД установлено!');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(50) PRIMARY KEY,
@@ -119,11 +100,10 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
     `);
 
-    console.log('✅ База данных инициализирована!');
+    console.log('✅ Таблицы созданы!');
     return true;
   } catch (error) {
-    console.error('❌ Ошибка инициализации БД:', error.message);
-    console.error('📌 Проверь переменную DATABASE_URL в Railway');
+    console.error('❌ Ошибка БД:', error.message);
     return false;
   }
 }
@@ -132,11 +112,8 @@ async function initDatabase() {
 // API ЭНДПОИНТЫ
 // ============================================
 
-// 1. РЕГИСТРАЦИЯ
 app.post('/api/register', async (req, res) => {
   const { id, name, password, color } = req.body;
-  console.log('📝 Регистрация:', id, name);
-  
   if (!id || !name || !password) {
     return res.status(400).json({ error: 'Заполните все поля' });
   }
@@ -149,19 +126,15 @@ app.post('/api/register', async (req, res) => {
       'INSERT INTO users (id, name, password, color, is_admin) VALUES ($1, $2, $3, $4, $5)',
       [id, name, password, color || '#6c8cff', false]
     );
-    console.log('✅ Пользователь зарегистрирован:', id);
     res.json({ success: true, user: { id, name, isAdmin: false, color: color || '#6c8cff' } });
   } catch (error) {
     console.error('❌ Ошибка регистрации:', error.message);
-    res.status(500).json({ error: 'Ошибка сервера: ' + error.message });
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 2. ВХОД
 app.post('/api/login', async (req, res) => {
   const { id, password } = req.body;
-  console.log('🔑 Вход:', id);
-  
   if (!id || !password) {
     return res.status(400).json({ error: 'Заполните ID и пароль' });
   }
@@ -173,18 +146,16 @@ app.post('/api/login', async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
-    console.log('✅ Вход выполнен:', id);
     res.json({
       success: true,
       user: { id: user.id, name: user.name, isAdmin: user.is_admin || false, color: user.color }
     });
   } catch (error) {
     console.error('❌ Ошибка входа:', error.message);
-    res.status(500).json({ error: 'Ошибка сервера: ' + error.message });
+    res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 3. ПОЛУЧИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 app.get('/api/users', async (req, res) => {
   try {
     const users = await getUsers();
@@ -196,12 +167,11 @@ app.get('/api/users', async (req, res) => {
     }));
     res.json(list);
   } catch (error) {
-    console.error('❌ Ошибка получения пользователей:', error.message);
+    console.error('❌ Ошибка:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 4. ПОЛУЧИТЬ ЧАТЫ
 app.get('/api/chats', async (req, res) => {
   const userId = req.query.userId;
   if (!userId) {
@@ -215,12 +185,11 @@ app.get('/api/chats', async (req, res) => {
     }));
     res.json(chatsWithMessages);
   } catch (error) {
-    console.error('❌ Ошибка получения чатов:', error.message);
+    console.error('❌ Ошибка:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 5. СОЗДАТЬ ЧАТ
 app.post('/api/chats', async (req, res) => {
   const { userId, partnerId } = req.body;
   if (!userId || !partnerId) {
@@ -249,12 +218,11 @@ app.post('/api/chats', async (req, res) => {
     );
     res.json({ success: true, chatId });
   } catch (error) {
-    console.error('❌ Ошибка создания чата:', error.message);
+    console.error('❌ Ошибка:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 6. ОТПРАВИТЬ СООБЩЕНИЕ
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
   if (!chatId || !fromUserId || !text) {
@@ -272,12 +240,11 @@ app.post('/api/messages', async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка отправки сообщения:', error.message);
+    console.error('❌ Ошибка:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 7. УДАЛИТЬ ЧАТ
 app.delete('/api/chats', async (req, res) => {
   const { userId, chatId } = req.body;
   if (!userId || !chatId) {
@@ -287,12 +254,11 @@ app.delete('/api/chats', async (req, res) => {
     await pool.query('DELETE FROM chats WHERE user_id = $1 AND id = $2', [userId, chatId]);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка удаления чата:', error.message);
+    console.error('❌ Ошибка:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// 8. СДЕЛАТЬ АДМИНОМ
 app.post('/api/admin/make', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
@@ -308,7 +274,6 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
-// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
@@ -329,7 +294,6 @@ app.delete('/api/admin/users', async (req, res) => {
   }
 });
 
-// 10. УДАЛИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
   try {
@@ -347,7 +311,6 @@ app.delete('/api/admin/users/all', async (req, res) => {
   }
 });
 
-// 11. ПОЛУЧИТЬ ОДИН ЧАТ
 app.get('/api/chat', async (req, res) => {
   const chatId = req.query.chatId;
   const userId = req.query.userId;
@@ -372,17 +335,13 @@ app.get('/api/chat', async (req, res) => {
   }
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Сервер работает!' });
+});
+
 // ===== ЗАПУСК =====
 app.listen(port, async () => {
   console.log(`🚀 Сервер запущен на порту ${port}`);
+  await initDatabase();
   console.log(`🌐 Открой: http://localhost:${port}`);
-  
-  // Пробуем подключиться к базе
-  const dbConnected = await initDatabase();
-  if (dbConnected) {
-    console.log('✅ Сервер полностью готов!');
-  } else {
-    console.log('⚠️ Сервер работает, но БД НЕ ПОДКЛЮЧЕНА!');
-    console.log('📌 Проверь переменную DATABASE_URL');
-  }
 });
