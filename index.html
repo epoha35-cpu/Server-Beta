@@ -309,13 +309,15 @@
         }
 
         // ============================================
-        // ЗАГРУЗКА ЧАТОВ (ИСПРАВЛЕННАЯ)
+        // ЗАГРУЗКА ЧАТОВ (С ПРИНУДИТЕЛЬНЫМ ОБНОВЛЕНИЕМ)
         // ============================================
         async function loadChats() {
             if (!currentUser) return;
 
             try {
-                const result = await apiRequest(`/chats?userId=${currentUser.id}`);
+                // Добавляем timestamp для принудительного обновления (убераем кэш)
+                const timestamp = Date.now();
+                const result = await apiRequest(`/chats?userId=${currentUser.id}&_=${timestamp}`);
                 chats = result;
 
                 renderChatList();
@@ -386,7 +388,7 @@
         }
 
         // ============================================
-        // ОТОБРАЖЕНИЕ СООБЩЕНИЙ (ИСПРАВЛЕННАЯ)
+        // ОТОБРАЖЕНИЕ СООБЩЕНИЙ
         // ============================================
         function renderMessages(chat) {
             if (!chat) {
@@ -444,7 +446,7 @@
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕННАЯ)
+        // ОТПРАВКА СООБЩЕНИЯ
         // ============================================
         async function sendMessage() {
             const text = messageInput.value.trim();
@@ -460,8 +462,11 @@
                 });
 
                 messageInput.value = '';
+                
+                // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ВСЕ ЧАТЫ
                 await loadChats();
                 
+                // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ
                 if (activeChatId) {
                     const updatedChat = chats.find(c => c.id === activeChatId);
                     if (updatedChat) {
