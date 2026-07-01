@@ -34,6 +34,7 @@ const clients = new Map();
 
 wss.on('connection', (ws) => {
   console.log('🔌 Новое WebSocket-подключение');
+  console.log('👥 Всего клиентов:', clients.size);
 
   ws.on('message', async (message) => {
     try {
@@ -45,6 +46,7 @@ wss.on('connection', (ws) => {
         ws.userId = data.userId;
         clients.set(data.userId, ws);
         console.log(`✅ Пользователь ${data.userId} подключен к WebSocket`);
+        console.log('👥 Текущие клиенты:', Array.from(clients.keys()));
         return;
       }
 
@@ -131,6 +133,7 @@ wss.on('connection', (ws) => {
     if (ws.userId) {
       clients.delete(ws.userId);
       console.log(`🔌 Пользователь ${ws.userId} отключился`);
+      console.log('👥 Осталось клиентов:', clients.size);
     }
   });
 
@@ -225,7 +228,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// API ЭНДПОИНТЫ (ТОЛЬКО ДЛЯ HTTP)
+// API ЭНДПОИНТЫ
 // ============================================
 
 // 1. РЕГИСТРАЦИЯ
