@@ -282,17 +282,36 @@ app.delete('/api/chats', async (req, res) => {
   }
 });
 
-// 8. СДЕЛАТЬ АДМИНОМ
+// 8. СДЕЛАТЬ АДМИНОМ (доступно только если уже админ)
 app.post('/api/admin/make', async (req, res) => {
   const { userId, adminId } = req.body;
   console.log('👑 Назначение админа:', userId, 'админ:', adminId);
   
+  if (!userId || !adminId) {
+    return res.status(400).json({ error: 'Не указаны userId или adminId' });
+  }
+  
   try {
+    // Проверяем, существует ли пользователь
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(400).json({ error: 'Пользователь не найден' });
+    }
+    
+    // Если adminId не указан или пользователь не админ — назначаем самого себя
+    if (adminId === userId) {
+      await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
+      console.log('✅ Пользователь назначен админом:', userId);
+      return res.json({ success: true, message: 'Вы стали администратором!' });
+    }
+    
+    // Проверяем права админа
     const admin = await getUserById(adminId);
     if (!admin || !admin.is_admin) {
       console.log('❌ Нет прав у:', adminId);
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
+    
     await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
     console.log('✅ Пользователь назначен админом:', userId);
     res.json({ success: true });
@@ -312,6 +331,7 @@ app.delete('/api/admin/users', async (req, res) => {
   }
   
   try {
+    // Проверяем права админа
     const admin = await getUserById(adminId);
     if (!admin || !admin.is_admin) {
       console.log('❌ Нет прав у:', adminId);
@@ -320,6 +340,12 @@ app.delete('/api/admin/users', async (req, res) => {
     
     if (userId === adminId) {
       return res.status(400).json({ error: 'Нельзя удалить самого себя' });
+    }
+    
+    // Проверяем, существует ли пользователь
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
     }
     
     // Удаляем сообщения
@@ -344,6 +370,10 @@ app.delete('/api/admin/users', async (req, res) => {
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
   console.log('🗑️ Удаление всех пользователей, админ:', adminId);
+  
+  if (!adminId) {
+    return res.status(400).json({ error: 'Не указан adminId' });
+  }
   
   try {
     const admin = await getUserById(adminId);
