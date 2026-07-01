@@ -263,11 +263,19 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
-// СТАТИЧЕСКИЕ ФАЙЛЫ (ПОСЛЕ ВСЕХ API!)
+// СТАТИЧЕСКИЕ ФАЙЛЫ
 // ============================================
-app.use(express.static('.'));
+const path = require('path');
+app.use(express.static(path.join(__dirname)));
+
+// ЯВНАЯ ОТДАЧА index.html ДЛЯ ГЛАВНОЙ СТРАНИЦЫ
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // ===== ЗАПУСК =====
-app.listen(port, () => {
+app.listen(port, async () => {
   console.log(`🚀 Сервер запущен на порту ${port}`);
+  await initDatabase();
+  console.log(`🌐 Открой: http://localhost:${port}`);
 });
