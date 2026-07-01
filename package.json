@@ -1,8 +1,6 @@
 {
   "name": "messenger",
   "version": "1.0.0",
-  "description": "Real-time messenger on Railway",
-  "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
