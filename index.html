@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мессенджер</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app" id="app">
+
+        <!-- ЭКРАН АВТОРИЗАЦИИ -->
+        <div class="auth-screen" id="authScreen">
+            <div class="auth-card">
+                <h2 id="authTitle">Добро пожаловать</h2>
+                <div class="error-msg" id="authError"></div>
+                <input type="text" id="authName" placeholder="Имя" style="display: none;">
+                <input type="text" id="authId" placeholder="ID">
+                <input type="password" id="authPass" placeholder="Пароль">
+                <button id="authSubmitBtn">Войти</button>
+                <div class="auth-toggle">
+                    <span id="authToggleText">Нет аккаунта? Зарегистрироваться</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
+        <div class="main" id="mainApp" style="display: none;">
+            <!-- Левая панель -->
+            <div class="sidebar">
+                <div class="user-preview" id="userPreview">
+                    <div class="avatar" id="userAvatar" style="background-color: #6c8cff;">
+                        <span id="avatarLetter">А</span>
+                        <span class="admin-star" id="adminStar" style="display: none;">⭐</span>
+                    </div>
+                    <div class="user-info">
+                        <div class="name">
+                            <span id="userNameDisplay">Алексей</span>
+                            <span class="admin-badge" id="adminBadge" style="display: none;">⭐</span>
+                        </div>
+                        <div class="id-display" id="userIdDisplay">@alex</div>
+                        <div class="status">В сети</div>
+                    </div>
+                </div>
+                <button class="add-chat-btn" id="addChatBtn">➕ Добавить чат</button>
+                <div class="chat-list" id="chatList"></div>
+            </div>
+
+            <!-- Правая панель -->
+            <div class="chat-panel">
+                <div class="chat-header" id="chatHeader">
+                    <span class="avatar-small" id="chatAvatar" style="background-color: #4a5a7a;">Ч</span>
+                    <div class="chat-partner-info">
+                        <div class="chat-partner-name" id="chatPartnerName">Выберите чат</div>
+                        <div class="chat-partner-id" id="chatPartnerId"></div>
+                    </div>
+                </div>
+                <div class="messages" id="messagesContainer">
+                    <div class="empty-chat">👋 Начните диалог</div>
+                </div>
+                <div class="message-input-area">
+                    <input type="text" id="messageInput" placeholder="Введите сообщение..." disabled>
+                    <button id="sendMsgBtn" disabled>Отправить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА СОЗДАНИЯ ЧАТА -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h3>Новый чат</h3>
+            <div class="error" id="modalError"></div>
+            <input type="text" id="modalUserId" placeholder="Введите ID пользователя">
+            <div class="actions">
+                <button class="cancel" id="modalCancel">Отмена</button>
+                <button class="submit" id="modalSubmit">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- КОНТЕКСТНОЕ МЕНЮ -->
+    <div class="context-menu" id="contextMenu">
+        <div class="menu-item" id="menuLogout">
+            <span class="icon">🚪</span> Выйти из аккаунта
+        </div>
+        <div class="menu-item admin" id="menuAdmin">
+            <span class="icon">👑</span> Админ-панель
+        </div>
+        <div class="menu-item danger" id="menuDeleteChat">
+            <span class="icon">🗑️</span> Удалить чат
+        </div>
+    </div>
+
+    <!-- МОДАЛКА АДМИН-ПАНЕЛИ -->
+    <div class="modal-overlay" id="adminModal">
+        <div class="modal">
+            <h3>👑 Админ-панель</h3>
+            <div id="adminMessage"></div>
+            <div style="margin-bottom: 16px;">
+                <h4 style="margin-bottom: 8px; font-weight: 400; font-size: 14px; color: #ff6b6b;">Опасная зона</h4>
+                <button id="deleteAllUsersBtn" style="width: 100%; padding: 12px; border-radius: 40px; border: none; background: #ff6b6b; color: #fff; font-weight: 500; cursor: pointer; margin-bottom: 8px;">
+                    🗑️ Удалить ВСЕХ пользователей
+                </button>
+                <div style="color: #7b8799; font-size: 13px;">Это действие удалит все аккаунты и все чаты. Необратимо!</div>
+            </div>
+            <hr style="border-color: #2a313c; margin: 16px 0;">
+            <h4 style="margin-bottom: 12px; font-weight: 400; font-size: 14px; color: #9aa3b3;">Существующие пользователи</h4>
+            <div id="adminUserList" style="max-height: 200px; overflow-y: auto;"></div>
+            <div class="actions" style="margin-top: 16px;">
+                <button class="cancel" id="adminCloseBtn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛКА ВВОДА АДМИН-КОДА -->
+    <div class="modal-overlay" id="adminCodeModal">
+        <div class="modal">
+            <h3>🔐 Введите админ-код</h3>
+            <div class="error" id="adminCodeError"></div>
+            <input type="password" id="adminCodeInput" placeholder="Введите код доступа">
+            <div class="actions">
+                <button class="cancel" id="adminCodeCancel">Отмена</button>
+                <button class="submit" id="adminCodeSubmit">Подтвердить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // НАСТРОЙКИ
+        // ============================================
+        const ADMIN_CODE = 'admin123';
+        // Определяем URL для API (если локально - localhost, если на сервере - текущий домен)
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api' 
+            : '/api';
+
+        // ============================================
+        // СОСТОЯНИЕ
+        // ============================================
+        let currentUser = null;
+        let chats = [];
+        let activeChatId = null;
+        let isLoginMode = true;
+        let isAdmin = false;
+        let updateInterval = null;
+
+        // ============================================
+        // DOM ЭЛЕМЕНТЫ
+        // ============================================
+        const authScreen = document.getElementById('authScreen');
+        const mainApp = document.getElementById('mainApp');
+        const authTitle = document.getElementById('authTitle');
+        const authName = document.getElementById('authName');
+        const authId = document.getElementById('authId');
+        const authPass = document.getElementById('authPass');
+        const authSubmitBtn = document.getElementById('authSubmitBtn');
+        const authToggleText = document.getElementById('authToggleText');
+        const authError = document.getElementById('authError');
+
+        const userPreview = document.getElementById('userPreview');
+        const userAvatar = document.getElementById('userAvatar');
+        const avatarLetter = document.getElementById('avatarLetter');
+        const adminStar = document.getElementById('adminStar');
+        const userNameDisplay = document.getElementById('userNameDisplay');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const adminBadge = document.getElementById('adminBadge');
+        const chatList = document.getElementById('chatList');
+        const chatPartnerName = document.getElementById('chatPartnerName');
+        const chatPartnerId = document.getElementById('chatPartnerId');
+        const chatAvatar = document.getElementById('chatAvatar');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendMsgBtn = document.getElementById('sendMsgBtn');
+        const addChatBtn = document.getElementById('addChatBtn');
+
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalUserId = document.getElementById('modalUserId');
+        const modalError = document.getElementById('modalError');
+        const modalCancel = document.getElementById('modalCancel');
+        const modalSubmit = document.getElementById('modalSubmit');
+
+        const adminModal = document.getElementById('adminModal');
+        const adminMessage = document.getElementById('adminMessage');
+        const adminUserList = document.getElementById('adminUserList');
+        const adminCloseBtn = document.getElementById('adminCloseBtn');
+        const deleteAllUsersBtn = document.getElementById('deleteAllUsersBtn');
+
+        const adminCodeModal = document.getElementById('adminCodeModal');
+        const adminCodeInput = document.getElementById('adminCodeInput');
+        const adminCodeError = document.getElementById('adminCodeError');
+        const adminCodeCancel = document.getElementById('adminCodeCancel');
+        const adminCodeSubmit = document.getElementById('adminCodeSubmit');
+
+        const contextMenu = document.getElementById('contextMenu');
+        const menuLogout = document.getElementById('menuLogout');
+        const menuAdmin = document.getElementById('menuAdmin');
+        const menuDeleteChat = document.getElementById('menuDeleteChat');
+
+        // ============================================
+        // ФУНКЦИИ API
+        // ============================================
+        async function apiRequest(endpoint, method = 'GET', data = null) {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (data) options.body = JSON.stringify(data);
+
+            try {
+                const response = await fetch(`${API_URL}${endpoint}`, options);
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Ошибка запроса');
+                }
+                return result;
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // ============================================
+        // АВТОРИЗАЦИЯ
+        // ============================================
+        async function handleAuth() {
+            const id = authId.value.trim();
+            const pass = authPass.value.trim();
+            const name = authName.value.trim();
+            authError.style.display = 'none';
+
+            if (!id || !pass) {
+                authError.textContent = 'Заполните ID и пароль';
+                authError.style.display = 'block';
+                return;
+            }
+
+            try {
+                let result;
+                if (isLoginMode) {
+                    result = await apiRequest('/login', 'POST', { id, password: pass });
+                } else {
+                    if (!name) {
+                        authError.textContent = 'Введите имя';
+                        authError.style.display = 'block';
+                        return;
+                    }
+                    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#FF8A5C', '#A29BFE', '#FD79A8', '#00B894'];
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    result = await apiRequest('/register', 'POST', { id, name, password: pass, color: randomColor });
+                }
+
+                currentUser = result.user;
+                isAdmin = currentUser.isAdmin || false;
+
+                localStorage.setItem('messenger_user', JSON.stringify({
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    isAdmin: isAdmin
+                }));
+
+                enterMainApp();
+                await loadChats();
+
+                if (updateInterval) clearInterval(updateInterval);
+                updateInterval = setInterval(loadChats, 3000);
+
+            } catch (error) {
+                authError.textContent = error.message;
+                authError.style.display = 'block';
+            }
+        }
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            if (isLoginMode) {
+                authTitle.textContent = 'Добро пожаловать';
+                authSubmitBtn.textContent = 'Войти';
+                authToggleText.textContent = 'Нет аккаунта? Зарегистрироваться';
+                authName.style.display = 'none';
+            } else {
+                authTitle.textContent = 'Регистрация';
+                authSubmitBtn.textContent = 'Создать аккаунт';
+                authToggleText.textContent = 'Уже есть аккаунт? Войти';
+                authName.style.display = 'block';
+            }
+            authError.style.display = 'none';
+        }
+
+        function enterMainApp() {
+            authScreen.classList.add('hidden');
+            mainApp.style.display = 'flex';
+
+            const color = currentUser.color || '#6c8cff';
+            userAvatar.style.backgroundColor = color;
+            avatarLetter.textContent = currentUser.name.charAt(0).toUpperCase();
+
+            if (isAdmin) {
+                adminStar.style.display = 'flex';
+                adminBadge.style.display = 'inline';
+            } else {
+                adminStar.style.display = 'none';
+                adminBadge.style.display = 'none';
+            }
+
+            userNameDisplay.textContent = currentUser.name;
+            userIdDisplay.textContent = '@' + currentUser.id;
+        }
+
+        // ============================================
+        // ЗАГРУЗКА ЧАТОВ
+        // ============================================
+        async function loadChats() {
+            if (!currentUser) return;
+
+            try {
+                const result = await apiRequest(`/chats?userId=${currentUser.id}`);
+                chats = result;
+
+                renderChatList();
+
+                if (activeChatId) {
+                    const chat = chats.find(c => c.id === activeChatId);
+                    if (chat) {
+                        renderMessages(chat);
+                        return;
+                    }
+                }
+
+                if (chats.length > 0) {
+                    activeChatId = chats[0].id;
+                    renderMessages(chats[0]);
+                } else {
+                    showEmptyState();
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки чатов:', error);
+            }
+        }
+
+        // ============================================
+        // РЕНДЕРИНГ
+        // ============================================
+        function renderChatList() {
+            chatList.innerHTML = '';
+
+            if (!chats || chats.length === 0) {
+                chatList.innerHTML = '<div style="color:#7b8799; padding:12px; text-align:center; font-size:14px;">Нет чатов</div>';
+                return;
+            }
+
+            chats.forEach(chat => {
+                const div = document.createElement('div');
+                div.className = 'chat-item' + (chat.id === activeChatId ? ' active' : '');
+                div.dataset.chatId = chat.id;
+
+                const letter = chat.partner_name ? chat.partner_name.charAt(0).toUpperCase() : '?';
+
+                div.innerHTML = `
+                    <div class="avatar-small" style="background-color: ${chat.partner_color || '#6c8cff'};">
+                        ${letter}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">${chat.partner_name || chat.partner_id} ${chat.partner_is_admin ? '⭐' : ''}</div>
+                        <div class="chat-id">@${chat.partner_id}</div>
+                    </div>
+                `;
+
+                div.addEventListener('click', () => {
+                    activeChatId = chat.id;
+                    renderChatList();
+                    renderMessages(chat);
+                });
+
+                div.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showContextMenu(e.clientX, e.clientY, 'chat', chat.id);
+                });
+
+                chatList.appendChild(div);
+            });
+        }
+
+        function renderMessages(chat) {
+            const partner = chat.partner_name || chat.partner_id;
+            chatPartnerName.textContent = partner + (chat.partner_is_admin ? ' ⭐' : '');
+            chatPartnerId.textContent = '@' + chat.partner_id;
+            chatAvatar.textContent = partner.charAt(0).toUpperCase();
+            chatAvatar.style.backgroundColor = chat.partner_color || '#6c8cff';
+
+            messagesContainer.innerHTML = '';
+
+            if (!chat.messages || chat.messages.length === 0) {
+                messagesContainer.innerHTML = '<div class="empty-chat">Нет сообщений</div>';
+                messageInput.disabled = false;
+                sendMsgBtn.disabled = false;
+                return;
+            }
+
+            chat.messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = 'msg' + (msg.from_user_id === currentUser.id ? ' self' : '');
+                const time = new Date(msg.created_at).toLocaleTimeString();
+                div.innerHTML = `${msg.text}<div class="time">${time}</div>`;
+                messagesContainer.appendChild(div);
+            });
+
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            messageInput.disabled = false;
+            sendMsgBtn.disabled = false;
+        }
+
+        function showEmptyState() {
+            messagesContainer.innerHTML = '<div class="empty-chat">👋 Начните диалог</div>';
+            chatPartnerName.textContent = 'Выберите чат';
+            chatPartnerId.textContent = '';
+            chatAvatar.textContent = '?';
+            chatAvatar.style.backgroundColor = '#4a5a7a';
+            messageInput.disabled = true;
+            sendMsgBtn.disabled = true;
+        }
+
+        // ============================================
+        // ОТПРАВКА СООБЩЕНИЯ
+        // ============================================
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !currentUser || !activeChatId) return;
+
+            try {
+                await apiRequest('/messages', 'POST', {
+                    chatId: activeChatId,
+                    fromUserId: currentUser.id,
+                    text: text
+                });
+
+                messageInput.value = '';
+                await loadChats();
+            } catch (error) {
+                console.error('Ошибка отправки:', error);
+                alert('Не удалось отправить сообщение');
+            }
+        }
+
+        // ============================================
+        // СОЗДАНИЕ ЧАТА
+        // ============================================
+        async function createChat() {
+            const partnerId = modalUserId.value.trim();
+            modalError.textContent = '';
+
+            if (!partnerId) {
+                modalError.textContent = 'Введите ID пользователя';
+                return;
+            }
+
+            if (partnerId === currentUser.id) {
+                modalError.textContent = 'Нельзя добавить себя';
+                return;
+            }
+
+            try {
+                await apiRequest('/chats', 'POST', {
+                    userId: currentUser.id,
+                    partnerId: partnerId
+                });
+
+                modalOverlay.classList.remove('show');
+                await loadChats();
+            } catch (error) {
+                modalError.textContent = error.message;
+            }
+        }
+
+        // ============================================
+        // УДАЛЕНИЕ ЧАТА
+        // ============================================
+        async function deleteChat(chatId) {
+            if (!confirm('Удалить этот чат?')) return;
+
+            try {
+                await apiRequest('/chats', 'DELETE', {
+                    userId: currentUser.id,
+                    chatId: chatId
+                });
+
+                if (activeChatId === chatId) {
+                    activeChatId = null;
+                }
+                await loadChats();
+                hideContextMenu();
+            } catch (error) {
+                console.error('Ошибка удаления:', error);
+                alert('Не удалось удалить чат');
+            }
+        }
+
+        // ============================================
+        // ВЫХОД ИЗ АККАУНТА
+        // ============================================
+        function logout() {
+            if (!confirm('Выйти из аккаунта?')) return;
+            localStorage.removeItem('messenger_user');
+            currentUser = null;
+            isAdmin = false;
+            activeChatId = null;
+            if (updateInterval) clearInterval(updateInterval);
+
+            authScreen.classList.remove('hidden');
+            mainApp.style.display = 'none';
+            hideContextMenu();
+        }
+
+        // ============================================
+        // АДМИН-ПАНЕЛЬ
+        // ============================================
+        async function showAdminPanel() {
+            try {
+                const users = await apiRequest('/users');
+                adminUserList.innerHTML = '';
+
+                users.forEach(user => {
+                    const div = document.createElement('div');
+                    div.style.cssText = `
+                        display: flex; justify-content: space-between; 
+                        padding: 8px 12px; background: #161c24; 
+                        border-radius: 12px; margin-bottom: 6px; 
+                        align-items: center;
+                    `;
+                    div.innerHTML = `
+                        <div>
+                            <span style="font-weight: 500;">${user.name} ${user.isAdmin ? '⭐' : ''}</span>
+                            <span style="color: #7b8799; margin-left: 8px;">@${user.id}</span>
+                            <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:${user.color || '#6c8cff'};margin-left:8px;"></span>
+                        </div>
+                        ${user.id !== currentUser.id ? 
+                            `<button onclick="deleteUser('${user.id}')" style="color:#ff6b6b;background:none;border:none;cursor:pointer;font-size:16px;">✕</button>` : 
+                            '<span style="color:#6fcf97;font-size:12px;">(вы)</span>'
+                        }
+                    `;
+                    adminUserList.appendChild(div);
+                });
+
+                adminModal.classList.add('show');
+            } catch (error) {
+                console.error('Ошибка загрузки пользователей:', error);
+            }
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('Удалить пользователя?')) return;
+
+            try {
+                await apiRequest('/admin/users', 'DELETE', {
+                    userId: userId,
+                    adminId: currentUser.id
+                });
+                await showAdminPanel();
+                await loadChats();
+                showAdminMessage('Пользователь удален', 'success');
+            } catch (error) {
+                showAdminMessage(error.message, 'error');
+            }
+        }
+
+        async function deleteAllUsers() {
+            if (!confirm('⚠️ Удалить ВСЕХ пользователей?')) return;
+            if (!confirm('ВСЕ ДАННЫЕ БУДУТ УДАЛЕНЫ. Вы уверены?')) return;
+
+            try {
+                await apiRequest('/admin/users/all', 'DELETE', {
+                    adminId: currentUser.id
+                });
+                adminModal.classList.remove('show');
+                await loadChats();
+                alert('✅ Все пользователи удалены');
+            } catch (error) {
+                showAdminMessage(error.message, 'error');
+            }
+        }
+
+        function showAdminMessage(text, type = 'error') {
+            adminMessage.textContent = text;
+            adminMessage.style.color = type === 'success' ? '#6fcf97' : '#ff9aa7';
+            setTimeout(() => { adminMessage.textContent = ''; }, 3000);
+        }
+
+        // ============================================
+        // КОНТЕКСТНОЕ МЕНЮ
+        // ============================================
+        let contextTarget = null;
+        let contextChatId = null;
+
+        function showContextMenu(x, y, target, chatId = null) {
+            contextTarget = target;
+            contextChatId = chatId;
+
+            if (target === 'user') {
+                menuDeleteChat.style.display = 'none';
+                menuLogout.style.display = 'flex';
+                menuAdmin.style.display = 'flex';
+            } else if (target === 'chat') {
+                menuDeleteChat.style.display = 'flex';
+                menuLogout.style.display = 'none';
+                menuAdmin.style.display = 'none';
+            }
+
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = Math.min(x, window.innerWidth - 220) + 'px';
+            contextMenu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
+        }
+
+        function hideContextMenu() {
+            contextMenu.style.display = 'none';
+        }
+
+        // ============================================
+        // ОБРАБОТЧИКИ
+        // ============================================
+
+        // Авторизация
+        authSubmitBtn.addEventListener('click', handleAuth);
+        authToggleText.addEventListener('click', toggleAuthMode);
+        authId.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAuth(); });
+        authPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAuth(); });
+
+        // Добавление чата
+        addChatBtn.addEventListener('click', () => {
+            modalOverlay.classList.add('show');
+            modalUserId.value = '';
+            modalError.textContent = '';
+        });
+        modalCancel.addEventListener('click', () => modalOverlay.classList.remove('show'));
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) modalOverlay.classList.remove('show');
+        });
+        modalSubmit.addEventListener('click', createChat);
+        modalUserId.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') createChat();
+        });
+
+        // Отправка сообщений
+        sendMsgBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        // Контекстное меню пользователя
+        userPreview.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, 'user');
+        });
+
+        menuLogout.addEventListener('click', logout);
+        menuDeleteChat.addEventListener('click', () => {
+            if (contextChatId) {
+                deleteChat(contextChatId);
+            }
+        });
+
+        // Админ-панель
+        menuAdmin.addEventListener('click', () => {
+            hideContextMenu();
+            if (isAdmin) {
+                showAdminPanel();
+            } else {
+                adminCodeModal.classList.add('show');
+                adminCodeInput.value = '';
+                adminCodeError.textContent = '';
+            }
+        });
+
+        adminCodeSubmit.addEventListener('click', async () => {
+            const code = adminCodeInput.value.trim();
+            if (code === ADMIN_CODE) {
+                adminCodeModal.classList.remove('show');
+                isAdmin = true;
+                try {
+                    await apiRequest('/admin/make', 'POST', {
+                        userId: currentUser.id,
+                        adminId: currentUser.id
+                    });
+                    adminStar.style.display = 'flex';
+                    adminBadge.style.display = 'inline';
+                    showAdminPanel();
+                } catch (error) {
+                    adminCodeError.textContent = 'Ошибка: ' + error.message;
+                }
+            } else {
+                adminCodeError.textContent = '❌ Неверный код доступа';
+            }
+        });
+
+        adminCodeCancel.addEventListener('click', () => adminCodeModal.classList.remove('show'));
+        adminCodeModal.addEventListener('click', (e) => {
+            if (e.target === adminCodeModal) adminCodeModal.classList.remove('show');
+        });
+        adminCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') adminCodeSubmit.click();
+        });
+
+        adminCloseBtn.addEventListener('click', () => adminModal.classList.remove('show'));
+        adminModal.addEventListener('click', (e) => {
+            if (e.target === adminModal) adminModal.classList.remove('show');
+        });
+        deleteAllUsersBtn.addEventListener('click', deleteAllUsers);
+
+        // Скрытие меню
+        document.addEventListener('click', (e) => {
+            if (!contextMenu.contains(e.target)) {
+                hideContextMenu();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideContextMenu();
+        });
+
+        // ============================================
+        // ИНИЦИАЛИЗАЦИЯ
+        // ============================================
+        async function init() {
+            const savedUser = localStorage.getItem('messenger_user');
+            if (savedUser) {
+                try {
+                    const user = JSON.parse(savedUser);
+                    const users = await apiRequest('/users');
+                    const exists = users.find(u => u.id === user.id);
+
+                    if (exists) {
+                        currentUser = user;
+                        isAdmin = user.isAdmin || false;
+                        enterMainApp();
+                        await loadChats();
+                        updateInterval = setInterval(loadChats, 3000);
+                        return;
+                    } else {
+                        localStorage.removeItem('messenger_user');
+                    }
+                } catch (e) {
+                    localStorage.removeItem('messenger_user');
+                }
+            }
+
+            authScreen.classList.remove('hidden');
+            mainApp.style.display = 'none';
+            isLoginMode = true;
+            authName.style.display = 'none';
+            authTitle.textContent = 'Добро пожаловать';
+            authSubmitBtn.textContent = 'Войти';
+            authToggleText.textContent = 'Нет аккаунта? Зарегистрироваться';
+            authError.style.display = 'none';
+        }
+
+        init();
+    </script>
+</body>
+</html>
