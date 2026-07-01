@@ -1,3 +1,4 @@
+const API_URL = 'https://server-beta-production.up.railway.app';
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
