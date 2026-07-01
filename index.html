@@ -384,6 +384,8 @@
         }
 
         function renderMessages(chat) {
+            console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
+            console.log('📨 Сообщения:', chat.messages);
             const partner = chat.partner_name || chat.partner_id;
             chatPartnerName.textContent = partner + (chat.partner_is_admin ? ' ⭐' : '');
             chatPartnerId.textContent = '@' + chat.partner_id;
