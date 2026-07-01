@@ -131,7 +131,6 @@
         let isAdmin = false;
         let ws = null;
         let contextChatId = null;
-        let isUpdating = false;
 
         // ============================================
         // DOM ЭЛЕМЕНТЫ
@@ -187,75 +186,6 @@
         const menuDeleteChat = document.getElementById('menuDeleteChat');
 
         // ============================================
-        // WEBSOCKET
-        // ============================================
-       // ============================================
-// WEBSOCKET (ИСПРАВЛЕННЫЙ)
-// ============================================
-function connectWebSocket() {
-    if (!currentUser) return;
-    
-    // Если уже есть открытый сокет — не создаём новый!
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log('✅ WebSocket уже подключен');
-        return;
-    }
-    
-    // Если сокет закрывается или подключается — не создаём новый
-    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.CLOSING)) {
-        console.log('⏳ WebSocket уже подключается/закрывается');
-        return;
-    }
-    
-    console.log('🔌 Создаём новое WebSocket-подключение...');
-    ws = new WebSocket(WS_URL);
-    
-    ws.onopen = () => {
-        console.log('🔌 WebSocket подключен');
-        connectionStatus.textContent = '🟢 В сети';
-        ws.send(JSON.stringify({
-            type: 'auth',
-            userId: currentUser.id
-        }));
-    };
-    
-    ws.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            console.log('📨 Получено WS-сообщение:', data);
-            
-            if (data.type === 'new_message') {
-                console.log('📨 НОВОЕ СООБЩЕНИЕ! Принудительно обновляем чаты...');
-                loadChats();
-            }
-            
-            if (data.type === 'new_chat') {
-                console.log('📨 НОВЫЙ ЧАТ! Принудительно обновляем чаты...');
-                loadChats();
-            }
-        } catch (error) {
-            console.error('❌ Ошибка обработки WS:', error);
-        }
-    };
-    
-    ws.onclose = () => {
-        console.log('🔌 WebSocket отключен');
-        connectionStatus.textContent = '🔴 Не в сети';
-        // НЕ ОБНУЛЯЕМ ws сразу, чтобы избежать повторных подключений
-        setTimeout(() => {
-            if (ws && ws.readyState === WebSocket.CLOSED) {
-                ws = null;
-                // Подключаемся заново через 5 секунд
-                setTimeout(connectWebSocket, 5000);
-            }
-        }, 1000);
-    };
-    
-    ws.onerror = (error) => {
-        console.error('❌ WebSocket ошибка:', error);
-    };
-}
-        // ============================================
         // ФУНКЦИИ API
         // ============================================
         async function apiRequest(endpoint, method = 'GET', data = null) {
@@ -278,6 +208,69 @@ function connectWebSocket() {
                 console.error('API Error:', error);
                 throw error;
             }
+        }
+
+        // ============================================
+        // WEBSOCKET
+        // ============================================
+        function connectWebSocket() {
+            if (!currentUser) return;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log('✅ WebSocket уже подключен');
+                return;
+            }
+            
+            if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.CLOSING)) {
+                console.log('⏳ WebSocket уже подключается/закрывается');
+                return;
+            }
+            
+            console.log('🔌 Создаём новое WebSocket-подключение...');
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                console.log('🔌 WebSocket подключен');
+                connectionStatus.textContent = '🟢 В сети';
+                ws.send(JSON.stringify({
+                    type: 'auth',
+                    userId: currentUser.id
+                }));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('📨 Получено WS-сообщение:', data);
+                    
+                    if (data.type === 'new_message') {
+                        console.log('📨 НОВОЕ СООБЩЕНИЕ! Обновляем чаты...');
+                        loadChats();
+                    }
+                    
+                    if (data.type === 'new_chat') {
+                        console.log('📨 НОВЫЙ ЧАТ! Обновляем чаты...');
+                        loadChats();
+                    }
+                } catch (error) {
+                    console.error('❌ Ошибка обработки WS:', error);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('🔌 WebSocket отключен');
+                connectionStatus.textContent = '🔴 Не в сети';
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.CLOSED) {
+                        ws = null;
+                        setTimeout(connectWebSocket, 5000);
+                    }
+                }, 1000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket ошибка:', error);
+            };
         }
 
         // ============================================
@@ -321,7 +314,7 @@ function connectWebSocket() {
 
                 enterMainApp();
                 await loadChats();
-                connectWebSocket();
+                setTimeout(connectWebSocket, 500);
 
             } catch (error) {
                 authError.textContent = error.message;
@@ -375,6 +368,7 @@ function connectWebSocket() {
                 const timestamp = Date.now();
                 const result = await apiRequest(`/chats?userId=${currentUser.id}&_=${timestamp}`);
                 chats = result;
+                console.log('📦 Загружены чаты:', chats.length);
 
                 renderChatList();
 
@@ -444,7 +438,10 @@ function connectWebSocket() {
         }
 
         function renderMessages(chat) {
+            console.log('🔄 renderMessages вызван с чатом:', chat);
+            
             if (!chat) {
+                console.warn('⚠️ Чат не передан');
                 messagesContainer.innerHTML = '<div class="empty-chat">Чат не найден</div>';
                 chatPartnerName.textContent = 'Выберите чат';
                 chatPartnerId.textContent = '';
@@ -470,6 +467,8 @@ function connectWebSocket() {
                 return;
             }
 
+            console.log('📨 Рендерим сообщений:', chat.messages.length);
+            
             chat.messages.forEach(msg => {
                 const div = document.createElement('div');
                 div.className = 'msg' + (msg.from_user_id === currentUser.id ? ' self' : '');
@@ -494,14 +493,13 @@ function connectWebSocket() {
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ (ТОЛЬКО ЧЕРЕЗ WEBSOCKET)
+        // ОТПРАВКА СООБЩЕНИЯ
         // ============================================
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || !currentUser || !activeChatId) return;
 
             try {
-                // 1. Отправляем через WebSocket (сервер сам сохранит в БД и разошлёт)
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'new_message',
@@ -511,7 +509,6 @@ function connectWebSocket() {
                     }));
                     console.log('📤 Сообщение отправлено через WebSocket');
                 } else {
-                    // Если WebSocket не работает — используем HTTP как запасной вариант
                     console.warn('⚠️ WebSocket не доступен, использую HTTP');
                     await apiRequest('/messages', 'POST', {
                         chatId: activeChatId,
@@ -522,7 +519,7 @@ function connectWebSocket() {
 
                 messageInput.value = '';
                 
-                // 2. Обновляем чат локально (для отправителя)
+                // Обновляем чат для отправителя
                 await loadChats();
 
                 if (activeChatId) {
@@ -796,57 +793,6 @@ function connectWebSocket() {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') hideContextMenu();
         });
-
-        async function sendMessage() {
-    const text = messageInput.value.trim();
-    if (!text || !currentUser || !activeChatId) return;
-
-    // Проверяем WebSocket перед отправкой
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.log('🔄 WebSocket не подключен, подключаем...');
-        await connectWebSocket();
-        // Ждём подключения
-        await new Promise(resolve => setTimeout(resolve, 500));
-    }
-
-    try {
-        // Отправляем через WebSocket
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                type: 'new_message',
-                chatId: activeChatId,
-                fromUserId: currentUser.id,
-                text: text
-            }));
-            console.log('📤 Сообщение отправлено через WebSocket');
-        } else {
-            // Запасной вариант через HTTP
-            await apiRequest('/messages', 'POST', {
-                chatId: activeChatId,
-                fromUserId: currentUser.id,
-                text: text
-            });
-        }
-
-        messageInput.value = '';
-        await loadChats();
-
-        if (activeChatId) {
-            const updatedChat = chats.find(c => c.id === activeChatId);
-            if (updatedChat) {
-                renderMessages(updatedChat);
-            }
-        }
-
-        setTimeout(() => {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }, 100);
-
-    } catch (error) {
-        console.error('Ошибка отправки:', error);
-        alert('Не удалось отправить сообщение');
-    }
-}
 
         // ============================================
         // ИНИЦИАЛИЗАЦИЯ
