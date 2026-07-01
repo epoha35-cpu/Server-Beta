@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    <!-- ===== МОДАЛКА СОЗДАНИЯ ЧАТА ===== -->
+    <!-- ===== МОДАЛКИ ===== -->
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
             <h3>Новый чат</h3>
@@ -77,14 +77,12 @@
         </div>
     </div>
 
-    <!-- ===== КОНТЕКСТНОЕ МЕНЮ ===== -->
     <div class="context-menu" id="contextMenu">
         <div class="menu-item" id="menuLogout"><span class="icon">🚪</span> Выйти из аккаунта</div>
         <div class="menu-item admin" id="menuAdmin"><span class="icon">👑</span> Админ-панель</div>
         <div class="menu-item danger" id="menuDeleteChat"><span class="icon">🗑️</span> Удалить чат</div>
     </div>
 
-    <!-- ===== МОДАЛКА АДМИН-ПАНЕЛИ ===== -->
     <div class="modal-overlay" id="adminModal">
         <div class="modal">
             <h3>👑 Админ-панель</h3>
@@ -103,7 +101,6 @@
         </div>
     </div>
 
-    <!-- ===== МОДАЛКА ВВОДА АДМИН-КОДА ===== -->
     <div class="modal-overlay" id="adminCodeModal">
         <div class="modal">
             <h3>🔐 Введите админ-код</h3>
@@ -134,6 +131,7 @@
         let isAdmin = false;
         let ws = null;
         let contextChatId = null;
+        let isUpdating = false;
 
         // ============================================
         // DOM ЭЛЕМЕНТЫ
@@ -194,6 +192,10 @@
         function connectWebSocket() {
             if (!currentUser) return;
             
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
             ws = new WebSocket(WS_URL);
             
             ws.onopen = () => {
@@ -211,13 +213,25 @@
                     console.log('📨 Получено WS-сообщение:', data);
                     
                     if (data.type === 'new_message') {
-                        console.log('📨 Новое сообщение!', data);
-                        loadChats();
+                        console.log('📨 НОВОЕ СООБЩЕНИЕ! Принудительно обновляем чаты...');
+                        if (!isUpdating) {
+                            isUpdating = true;
+                            setTimeout(() => {
+                                loadChats();
+                                isUpdating = false;
+                            }, 300);
+                        }
                     }
                     
                     if (data.type === 'new_chat') {
-                        console.log('📨 Новый чат!', data);
-                        loadChats();
+                        console.log('📨 НОВЫЙ ЧАТ! Принудительно обновляем чаты...');
+                        if (!isUpdating) {
+                            isUpdating = true;
+                            setTimeout(() => {
+                                loadChats();
+                                isUpdating = false;
+                            }, 300);
+                        }
                     }
                 } catch (error) {
                     console.error('❌ Ошибка обработки WS:', error);
@@ -227,6 +241,7 @@
             ws.onclose = () => {
                 console.log('🔌 WebSocket отключен');
                 connectionStatus.textContent = '🔴 Не в сети';
+                ws = null;
                 setTimeout(connectWebSocket, 3000);
             };
             
@@ -474,14 +489,14 @@
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ (ТОЛЬКО ЧЕРЕЗ WEBSOCKET + HTTP)
+        // ОТПРАВКА СООБЩЕНИЯ (ТОЛЬКО ЧЕРЕЗ WEBSOCKET)
         // ============================================
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || !currentUser || !activeChatId) return;
 
             try {
-                // 1. Отправляем через WebSocket (мгновенно)
+                // 1. Отправляем через WebSocket (сервер сам сохранит в БД и разошлёт)
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'new_message',
@@ -490,18 +505,19 @@
                         text: text
                     }));
                     console.log('📤 Сообщение отправлено через WebSocket');
+                } else {
+                    // Если WebSocket не работает — используем HTTP как запасной вариант
+                    console.warn('⚠️ WebSocket не доступен, использую HTTP');
+                    await apiRequest('/messages', 'POST', {
+                        chatId: activeChatId,
+                        fromUserId: currentUser.id,
+                        text: text
+                    });
                 }
-
-                // 2. Сохраняем в БД через HTTP
-                await apiRequest('/messages', 'POST', {
-                    chatId: activeChatId,
-                    fromUserId: currentUser.id,
-                    text: text
-                });
 
                 messageInput.value = '';
                 
-                // 3. Обновляем чат локально
+                // 2. Обновляем чат локально (для отправителя)
                 await loadChats();
 
                 if (activeChatId) {
@@ -522,7 +538,7 @@
         }
 
         // ============================================
-        // СОЗДАНИЕ ЧАТА
+        // ОСТАЛЬНЫЕ ФУНКЦИИ
         // ============================================
         async function createChat() {
             const partnerId = modalUserId.value.trim();
@@ -551,9 +567,6 @@
             }
         }
 
-        // ============================================
-        // УДАЛЕНИЕ ЧАТА
-        // ============================================
         async function deleteChat(chatId) {
             if (!confirm('Удалить этот чат?')) return;
 
@@ -574,9 +587,6 @@
             }
         }
 
-        // ============================================
-        // ВЫХОД ИЗ АККАУНТА
-        // ============================================
         function logout() {
             if (!confirm('Выйти из аккаунта?')) return;
             localStorage.removeItem('messenger_user');
@@ -783,6 +793,18 @@
         });
 
         // ============================================
+        // АВТООБНОВЛЕНИЕ (на случай, если WebSocket упал)
+        // ============================================
+        setInterval(() => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('🔄 Проверка соединения...');
+                if (currentUser) {
+                    connectWebSocket();
+                }
+            }
+        }, 5000);
+
+        // ============================================
         // ИНИЦИАЛИЗАЦИЯ
         // ============================================
         async function init() {
@@ -798,7 +820,7 @@
                         isAdmin = user.isAdmin || false;
                         enterMainApp();
                         await loadChats();
-                        connectWebSocket();
+                        setTimeout(connectWebSocket, 500);
                         return;
                     } else {
                         localStorage.removeItem('messenger_user');
