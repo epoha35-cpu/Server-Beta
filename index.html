@@ -309,7 +309,7 @@
         }
 
         // ============================================
-        // ЗАГРУЗКА ЧАТОВ
+        // ЗАГРУЗКА ЧАТОВ (ИСПРАВЛЕННАЯ)
         // ============================================
         async function loadChats() {
             if (!currentUser) return;
@@ -332,6 +332,7 @@
                     activeChatId = chats[0].id;
                     renderMessages(chats[0]);
                 } else {
+                    activeChatId = null;
                     showEmptyState();
                 }
             } catch (error) {
@@ -384,13 +385,23 @@
             });
         }
 
+        // ============================================
+        // ОТОБРАЖЕНИЕ СООБЩЕНИЙ (ИСПРАВЛЕННАЯ)
+        // ============================================
         function renderMessages(chat) {
-            console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
-            
             if (!chat) {
+                console.warn('⚠️ renderMessages: чат не передан');
                 messagesContainer.innerHTML = '<div class="empty-chat">Чат не найден</div>';
+                chatPartnerName.textContent = 'Выберите чат';
+                chatPartnerId.textContent = '';
+                chatAvatar.textContent = '?';
+                chatAvatar.style.backgroundColor = '#4a5a7a';
+                messageInput.disabled = true;
+                sendMsgBtn.disabled = true;
                 return;
             }
+
+            console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
             
             const partner = chat.partner_name || chat.partner_id;
             chatPartnerName.textContent = partner + (chat.partner_is_admin ? ' ⭐' : '');
@@ -433,7 +444,7 @@
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕННАЯ!)
+        // ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕННАЯ)
         // ============================================
         async function sendMessage() {
             const text = messageInput.value.trim();
@@ -449,14 +460,16 @@
                 });
 
                 messageInput.value = '';
-                
-                // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ЧАТ
                 await loadChats();
                 
-                // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ
-                const updatedChat = chats.find(c => c.id === activeChatId);
-                if (updatedChat) {
-                    renderMessages(updatedChat);
+                if (activeChatId) {
+                    const updatedChat = chats.find(c => c.id === activeChatId);
+                    if (updatedChat) {
+                        renderMessages(updatedChat);
+                    } else if (chats.length > 0) {
+                        activeChatId = chats[0].id;
+                        renderMessages(chats[0]);
+                    }
                 }
                 
                 setTimeout(() => {
