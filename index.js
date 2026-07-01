@@ -106,7 +106,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// API ЭНДПОИНТЫ (ВСЕ ДО СТАТИКИ!)
+// API ЭНДПОИНТЫ
 // ============================================
 
 // 1. РЕГИСТРАЦИЯ
@@ -274,6 +274,10 @@ app.post('/api/admin/make', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
     if (adminId === userId) {
+      const user = await getUserById(userId);
+      if (!user) {
+        return res.status(400).json({ error: 'Пользователь не найден' });
+      }
       await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
       return res.json({ success: true });
     }
@@ -289,7 +293,7 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
-// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ
+// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ (АДМИН)
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
@@ -310,7 +314,7 @@ app.delete('/api/admin/users', async (req, res) => {
   }
 });
 
-// 10. УДАЛИТЬ ВСЕХ
+// 10. УДАЛИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (АДМИН)
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
   try {
