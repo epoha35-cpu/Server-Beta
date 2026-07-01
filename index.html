@@ -26,7 +26,6 @@
 
         <!-- ===== ОСНОВНОЙ ИНТЕРФЕЙС ===== -->
         <div class="main" id="mainApp" style="display: none;">
-            <!-- Левая панель -->
             <div class="sidebar">
                 <div class="user-preview" id="userPreview">
                     <div class="avatar" id="userAvatar" style="background-color: #6c8cff;">
@@ -39,14 +38,13 @@
                             <span class="admin-badge" id="adminBadge" style="display: none;">⭐</span>
                         </div>
                         <div class="id-display" id="userIdDisplay">@alex</div>
-                        <div class="status">В сети</div>
+                        <div class="status" id="connectionStatus">🟢 В сети</div>
                     </div>
                 </div>
                 <button class="add-chat-btn" id="addChatBtn">➕ Добавить чат</button>
                 <div class="chat-list" id="chatList"></div>
             </div>
 
-            <!-- Правая панель -->
             <div class="chat-panel">
                 <div class="chat-header" id="chatHeader">
                     <span class="avatar-small" id="chatAvatar" style="background-color: #4a5a7a;">Ч</span>
@@ -66,7 +64,7 @@
         </div>
     </div>
 
-    <!-- ===== МОДАЛКА СОЗДАНИЯ ЧАТА ===== -->
+    <!-- Модалки (оставлены без изменений) -->
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
             <h3>Новый чат</h3>
@@ -79,41 +77,30 @@
         </div>
     </div>
 
-    <!-- ===== КОНТЕКСТНОЕ МЕНЮ ===== -->
     <div class="context-menu" id="contextMenu">
-        <div class="menu-item" id="menuLogout">
-            <span class="icon">🚪</span> Выйти из аккаунта
-        </div>
-        <div class="menu-item admin" id="menuAdmin">
-            <span class="icon">👑</span> Админ-панель
-        </div>
-        <div class="menu-item danger" id="menuDeleteChat">
-            <span class="icon">🗑️</span> Удалить чат
-        </div>
+        <div class="menu-item" id="menuLogout"><span class="icon">🚪</span> Выйти из аккаунта</div>
+        <div class="menu-item admin" id="menuAdmin"><span class="icon">👑</span> Админ-панель</div>
+        <div class="menu-item danger" id="menuDeleteChat"><span class="icon">🗑️</span> Удалить чат</div>
     </div>
 
-    <!-- ===== МОДАЛКА АДМИН-ПАНЕЛИ ===== -->
     <div class="modal-overlay" id="adminModal">
         <div class="modal">
             <h3>👑 Админ-панель</h3>
             <div id="adminMessage"></div>
             <div style="margin-bottom: 16px;">
-                <h4 style="margin-bottom: 8px; font-weight: 400; font-size: 14px; color: #ff6b6b;">Опасная зона</h4>
-                <button id="deleteAllUsersBtn" style="width: 100%; padding: 12px; border-radius: 40px; border: none; background: #ff6b6b; color: #fff; font-weight: 500; cursor: pointer; margin-bottom: 8px;">
-                    🗑️ Удалить ВСЕХ пользователей
-                </button>
-                <div style="color: #7b8799; font-size: 13px;">Это действие удалит все аккаунты и все чаты. Необратимо!</div>
+                <h4 style="color:#ff6b6b;">Опасная зона</h4>
+                <button id="deleteAllUsersBtn" style="width:100%;padding:12px;border-radius:40px;background:#ff6b6b;color:#fff;border:none;cursor:pointer;">🗑️ Удалить ВСЕХ пользователей</button>
+                <div style="color:#7b8799;font-size:13px;">Это действие удалит все аккаунты и все чаты. Необратимо!</div>
             </div>
-            <hr style="border-color: #2a313c; margin: 16px 0;">
-            <h4 style="margin-bottom: 12px; font-weight: 400; font-size: 14px; color: #9aa3b3;">Существующие пользователи</h4>
-            <div id="adminUserList" style="max-height: 200px; overflow-y: auto;"></div>
-            <div class="actions" style="margin-top: 16px;">
+            <hr>
+            <h4 style="color:#9aa3b3;">Существующие пользователи</h4>
+            <div id="adminUserList" style="max-height:200px;overflow-y:auto;"></div>
+            <div class="actions" style="margin-top:16px;">
                 <button class="cancel" id="adminCloseBtn">Закрыть</button>
             </div>
         </div>
     </div>
 
-    <!-- ===== МОДАЛКА ВВОДА АДМИН-КОДА ===== -->
     <div class="modal-overlay" id="adminCodeModal">
         <div class="modal">
             <h3>🔐 Введите админ-код</h3>
@@ -132,6 +119,7 @@
         // ============================================
         const ADMIN_CODE = 'admin123';
         const API_URL = 'https://server-beta-production.up.railway.app/api';
+        const WS_URL = 'wss://server-beta-production.up.railway.app';
 
         // ============================================
         // СОСТОЯНИЕ
@@ -141,7 +129,7 @@
         let activeChatId = null;
         let isLoginMode = true;
         let isAdmin = false;
-        let updateInterval = null;
+        let ws = null;
         let contextChatId = null;
 
         // ============================================
@@ -156,6 +144,7 @@
         const authSubmitBtn = document.getElementById('authSubmitBtn');
         const authToggleText = document.getElementById('authToggleText');
         const authError = document.getElementById('authError');
+        const connectionStatus = document.getElementById('connectionStatus');
 
         const userPreview = document.getElementById('userPreview');
         const userAvatar = document.getElementById('userAvatar');
@@ -195,6 +184,52 @@
         const menuLogout = document.getElementById('menuLogout');
         const menuAdmin = document.getElementById('menuAdmin');
         const menuDeleteChat = document.getElementById('menuDeleteChat');
+
+        // ============================================
+        // WEBSOCKET
+        // ============================================
+        function connectWebSocket() {
+            if (!currentUser) return;
+            
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                console.log('🔌 WebSocket подключен');
+                connectionStatus.textContent = '🟢 В сети';
+                // Отправляем авторизацию
+                ws.send(JSON.stringify({
+                    type: 'auth',
+                    userId: currentUser.id
+                }));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('📨 Получено WS-сообщение:', data);
+                    
+                    if (data.type === 'new_message') {
+                        // НОВОЕ СООБЩЕНИЕ! Обновляем чат
+                        console.log('📨 Новое сообщение!', data);
+                        // Перезагружаем чаты, чтобы получить обновления
+                        loadChats();
+                    }
+                } catch (error) {
+                    console.error('❌ Ошибка обработки WS:', error);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('🔌 WebSocket отключен');
+                connectionStatus.textContent = '🔴 Не в сети';
+                // Пытаемся переподключиться через 3 секунды
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket ошибка:', error);
+            };
+        }
 
         // ============================================
         // ФУНКЦИИ API
@@ -262,9 +297,7 @@
 
                 enterMainApp();
                 await loadChats();
-
-                if (updateInterval) clearInterval(updateInterval);
-                updateInterval = setInterval(loadChats, 3000);
+                connectWebSocket();
 
             } catch (error) {
                 authError.textContent = error.message;
@@ -309,13 +342,12 @@
         }
 
         // ============================================
-        // ЗАГРУЗКА ЧАТОВ (С ПРИНУДИТЕЛЬНЫМ ОБНОВЛЕНИЕМ)
+        // ЗАГРУЗКА ЧАТОВ
         // ============================================
         async function loadChats() {
             if (!currentUser) return;
 
             try {
-                // Добавляем timestamp для принудительного обновления (убераем кэш)
                 const timestamp = Date.now();
                 const result = await apiRequest(`/chats?userId=${currentUser.id}&_=${timestamp}`);
                 chats = result;
@@ -387,12 +419,8 @@
             });
         }
 
-        // ============================================
-        // ОТОБРАЖЕНИЕ СООБЩЕНИЙ
-        // ============================================
         function renderMessages(chat) {
             if (!chat) {
-                console.warn('⚠️ renderMessages: чат не передан');
                 messagesContainer.innerHTML = '<div class="empty-chat">Чат не найден</div>';
                 chatPartnerName.textContent = 'Выберите чат';
                 chatPartnerId.textContent = '';
@@ -403,8 +431,6 @@
                 return;
             }
 
-            console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
-            
             const partner = chat.partner_name || chat.partner_id;
             chatPartnerName.textContent = partner + (chat.partner_is_admin ? ' ⭐' : '');
             chatPartnerId.textContent = '@' + chat.partner_id;
@@ -420,8 +446,6 @@
                 return;
             }
 
-            console.log('📨 Количество сообщений:', chat.messages.length);
-            
             chat.messages.forEach(msg => {
                 const div = document.createElement('div');
                 div.className = 'msg' + (msg.from_user_id === currentUser.id ? ' self' : '');
@@ -446,15 +470,24 @@
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ
+        // ОТПРАВКА СООБЩЕНИЯ (ЧЕРЕЗ WEBSOCKET!)
         // ============================================
         async function sendMessage() {
             const text = messageInput.value.trim();
             if (!text || !currentUser || !activeChatId) return;
 
             try {
-                console.log('📤 Отправка сообщения:', { chatId: activeChatId, fromUserId: currentUser.id, text });
-                
+                // 1. Отправляем через WebSocket для реального времени
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'new_message',
+                        chatId: activeChatId,
+                        fromUserId: currentUser.id,
+                        text: text
+                    }));
+                }
+
+                // 2. Также сохраняем через HTTP (на случай, если WebSocket упал)
                 await apiRequest('/messages', 'POST', {
                     chatId: activeChatId,
                     fromUserId: currentUser.id,
@@ -463,20 +496,17 @@
 
                 messageInput.value = '';
                 
-                // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ВСЕ ЧАТЫ
+                // 3. Обновляем чат (локально)
                 await loadChats();
-                
-                // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ
+
+                // 4. Показываем обновлённый чат
                 if (activeChatId) {
                     const updatedChat = chats.find(c => c.id === activeChatId);
                     if (updatedChat) {
                         renderMessages(updatedChat);
-                    } else if (chats.length > 0) {
-                        activeChatId = chats[0].id;
-                        renderMessages(chats[0]);
                     }
                 }
-                
+
                 setTimeout(() => {
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 }, 100);
@@ -488,7 +518,7 @@
         }
 
         // ============================================
-        // СОЗДАНИЕ ЧАТА
+        // ОСТАЛЬНЫЕ ФУНКЦИИ (создание чата, удаление и т.д.)
         // ============================================
         async function createChat() {
             const partnerId = modalUserId.value.trim();
@@ -517,9 +547,6 @@
             }
         }
 
-        // ============================================
-        // УДАЛЕНИЕ ЧАТА
-        // ============================================
         async function deleteChat(chatId) {
             if (!confirm('Удалить этот чат?')) return;
 
@@ -540,16 +567,13 @@
             }
         }
 
-        // ============================================
-        // ВЫХОД ИЗ АККАУНТА
-        // ============================================
         function logout() {
             if (!confirm('Выйти из аккаунта?')) return;
             localStorage.removeItem('messenger_user');
+            if (ws) ws.close();
             currentUser = null;
             isAdmin = false;
             activeChatId = null;
-            if (updateInterval) clearInterval(updateInterval);
 
             authScreen.classList.remove('hidden');
             mainApp.style.display = 'none';
@@ -657,7 +681,6 @@
         // ============================================
         // ОБРАБОТЧИКИ
         // ============================================
-
         authSubmitBtn.addEventListener('click', handleAuth);
         authToggleText.addEventListener('click', toggleAuthMode);
         authId.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAuth(); });
@@ -765,7 +788,7 @@
                         isAdmin = user.isAdmin || false;
                         enterMainApp();
                         await loadChats();
-                        updateInterval = setInterval(loadChats, 3000);
+                        connectWebSocket();
                         return;
                     } else {
                         localStorage.removeItem('messenger_user');
