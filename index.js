@@ -20,12 +20,9 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
-// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-async function getUsers() {
-  const result = await pool.query('SELECT * FROM users');
-  return result.rows;
-}
-
+// ============================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================
 async function getUserById(id) {
   const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
   return result.rows[0];
@@ -51,7 +48,9 @@ async function getMessages(chatId) {
   return result.rows;
 }
 
-// ===== ИНИЦИАЛИЗАЦИЯ БАЗЫ =====
+// ============================================
+// ИНИЦИАЛИЗАЦИЯ БАЗЫ
+// ============================================
 async function initDatabase() {
   try {
     console.log('🔄 Проверка подключения...');
@@ -107,7 +106,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// API ЭНДПОИНТЫ
+// API ЭНДПОИНТЫ (ВСЕ ДО СТАТИКИ!)
 // ============================================
 
 // 1. РЕГИСТРАЦИЯ
@@ -165,8 +164,8 @@ app.post('/api/login', async (req, res) => {
 // 3. ПОЛУЧИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await getUsers();
-    const list = users.map(u => ({
+    const result = await pool.query('SELECT id, name, color, is_admin FROM users');
+    const list = result.rows.map(u => ({
       id: u.id,
       name: u.name,
       color: u.color,
@@ -201,8 +200,6 @@ app.get('/api/chats', async (req, res) => {
 // 5. СОЗДАТЬ ЧАТ
 app.post('/api/chats', async (req, res) => {
   const { userId, partnerId } = req.body;
-  console.log('📝 Создание чата:', userId, '→', partnerId);
-  
   if (!userId || !partnerId) {
     return res.status(400).json({ error: 'Не указаны userId или partnerId' });
   }
@@ -227,7 +224,6 @@ app.post('/api/chats', async (req, res) => {
       'INSERT INTO chats (id, user_id, partner_id) VALUES ($1, $2, $3)',
       [chatId + '_mirror', partnerId, userId]
     );
-    console.log('✅ Чат создан:', chatId);
     res.json({ success: true, chatId });
   } catch (error) {
     console.error('❌ Ошибка создания чата:', error.message);
@@ -238,8 +234,6 @@ app.post('/api/chats', async (req, res) => {
 // 6. ОТПРАВИТЬ СООБЩЕНИЕ
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
-  console.log('📨 Отправка сообщения:', { chatId, fromUserId, text: text?.substring(0, 30) });
-  
   if (!chatId || !fromUserId || !text) {
     return res.status(400).json({ error: 'Не все поля заполнены' });
   }
@@ -253,7 +247,6 @@ app.post('/api/messages', async (req, res) => {
       'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [chatId]
     );
-    console.log('✅ Сообщение сохранено');
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка отправки сообщения:', error.message);
@@ -279,32 +272,16 @@ app.delete('/api/chats', async (req, res) => {
 // 8. СДЕЛАТЬ АДМИНОМ
 app.post('/api/admin/make', async (req, res) => {
   const { userId, adminId } = req.body;
-  console.log('👑 Назначение админа:', userId, 'админ:', adminId);
-  
-  if (!userId || !adminId) {
-    return res.status(400).json({ error: 'Не указаны userId или adminId' });
-  }
-  
   try {
-    // Если пользователь назначает себя
     if (adminId === userId) {
-      const user = await getUserById(userId);
-      if (!user) {
-        return res.status(400).json({ error: 'Пользователь не найден' });
-      }
       await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
-      console.log('✅ Пользователь назначен админом:', userId);
       return res.json({ success: true });
     }
-    
-    // Проверяем права админа
-    const admin = await getUserById(adminId);
-    if (!admin || !admin.is_admin) {
+    const admin = await pool.query('SELECT is_admin FROM users WHERE id = $1', [adminId]);
+    if (admin.rows.length === 0 || !admin.rows[0].is_admin) {
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
-    
     await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
-    console.log('✅ Пользователь назначен админом:', userId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
@@ -312,38 +289,20 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
-// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ (АДМИН)
+// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
-  console.log('🗑️ Удаление пользователя:', userId, 'админ:', adminId);
-  
-  if (!userId || !adminId) {
-    return res.status(400).json({ error: 'Не указаны userId или adminId' });
-  }
-  
   try {
-    const admin = await getUserById(adminId);
-    if (!admin || !admin.is_admin) {
+    const admin = await pool.query('SELECT is_admin FROM users WHERE id = $1', [adminId]);
+    if (admin.rows.length === 0 || !admin.rows[0].is_admin) {
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
-    
     if (userId === adminId) {
       return res.status(400).json({ error: 'Нельзя удалить самого себя' });
     }
-    
-    const user = await getUserById(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'Пользователь не найден' });
-    }
-    
-    await pool.query(
-      'DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1 OR partner_id = $1)',
-      [userId]
-    );
+    await pool.query('DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1 OR partner_id = $1)', [userId]);
     await pool.query('DELETE FROM chats WHERE user_id = $1 OR partner_id = $1', [userId]);
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
-    
-    console.log('✅ Пользователь удален:', userId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка удаления:', error.message);
@@ -351,24 +310,17 @@ app.delete('/api/admin/users', async (req, res) => {
   }
 });
 
-// 10. УДАЛИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (АДМИН)
+// 10. УДАЛИТЬ ВСЕХ
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
-  console.log('🗑️ Удаление всех пользователей, админ:', adminId);
-  
-  if (!adminId) {
-    return res.status(400).json({ error: 'Не указан adminId' });
-  }
-  
   try {
-    const admin = await getUserById(adminId);
-    if (!admin || !admin.is_admin) {
+    const admin = await pool.query('SELECT is_admin FROM users WHERE id = $1', [adminId]);
+    if (admin.rows.length === 0 || !admin.rows[0].is_admin) {
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
     await pool.query('DELETE FROM messages');
     await pool.query('DELETE FROM chats');
     await pool.query('DELETE FROM users');
-    console.log('✅ Все пользователи удалены');
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
@@ -376,48 +328,18 @@ app.delete('/api/admin/users/all', async (req, res) => {
   }
 });
 
-// 11. ПОЛУЧИТЬ ОДИН ЧАТ
-app.get('/api/chat', async (req, res) => {
-  const chatId = req.query.chatId;
-  const userId = req.query.userId;
-  if (!chatId || !userId) {
-    return res.status(400).json({ error: 'Не указаны chatId или userId' });
-  }
-  try {
-    const result = await pool.query(
-      'SELECT * FROM chats WHERE id = $1 AND user_id = $2',
-      [chatId, userId]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Чат не найден' });
-    }
-    const chat = result.rows[0];
-    const messages = await getMessages(chatId);
-    chat.messages = messages;
-    res.json(chat);
-  } catch (error) {
-    console.error('❌ Ошибка:', error.message);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-// 12. HEALTH CHECK
+// 11. HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Сервер работает!' });
 });
 
 // ============================================
-// СТАТИЧЕСКИЕ ФАЙЛЫ
+// СТАТИЧЕСКИЕ ФАЙЛЫ (ПОСЛЕ ВСЕХ API!)
 // ============================================
 app.use(express.static(path.join(__dirname)));
 
-// ЯВНАЯ ОТДАЧА index.html
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
 // ============================================
-// ЗАПУСК (ОДИН РАЗ!)
+// ЗАПУСК
 // ============================================
 app.listen(port, async () => {
   console.log(`🚀 Сервер запущен на порту ${port}`);
