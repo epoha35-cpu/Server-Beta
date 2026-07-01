@@ -1,7 +1,11 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const dns = require('dns');
 require('dotenv').config();
+
+// Принудительно используем IPv4
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -112,8 +116,11 @@ async function initDatabase() {
 // API ЭНДПОИНТЫ
 // ============================================
 
+// 1. РЕГИСТРАЦИЯ
 app.post('/api/register', async (req, res) => {
   const { id, name, password, color } = req.body;
+  console.log('📝 Регистрация:', id, name);
+  
   if (!id || !name || !password) {
     return res.status(400).json({ error: 'Заполните все поля' });
   }
@@ -126,6 +133,7 @@ app.post('/api/register', async (req, res) => {
       'INSERT INTO users (id, name, password, color, is_admin) VALUES ($1, $2, $3, $4, $5)',
       [id, name, password, color || '#6c8cff', false]
     );
+    console.log('✅ Пользователь зарегистрирован:', id);
     res.json({ success: true, user: { id, name, isAdmin: false, color: color || '#6c8cff' } });
   } catch (error) {
     console.error('❌ Ошибка регистрации:', error.message);
@@ -133,8 +141,11 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+// 2. ВХОД
 app.post('/api/login', async (req, res) => {
   const { id, password } = req.body;
+  console.log('🔑 Вход:', id);
+  
   if (!id || !password) {
     return res.status(400).json({ error: 'Заполните ID и пароль' });
   }
@@ -146,6 +157,7 @@ app.post('/api/login', async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ error: 'Неверный пароль' });
     }
+    console.log('✅ Вход выполнен:', id);
     res.json({
       success: true,
       user: { id: user.id, name: user.name, isAdmin: user.is_admin || false, color: user.color }
@@ -156,6 +168,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// 3. ПОЛУЧИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 app.get('/api/users', async (req, res) => {
   try {
     const users = await getUsers();
@@ -167,11 +180,12 @@ app.get('/api/users', async (req, res) => {
     }));
     res.json(list);
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка получения пользователей:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 4. ПОЛУЧИТЬ ЧАТЫ
 app.get('/api/chats', async (req, res) => {
   const userId = req.query.userId;
   if (!userId) {
@@ -185,13 +199,16 @@ app.get('/api/chats', async (req, res) => {
     }));
     res.json(chatsWithMessages);
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка получения чатов:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 5. СОЗДАТЬ ЧАТ
 app.post('/api/chats', async (req, res) => {
   const { userId, partnerId } = req.body;
+  console.log('📝 Создание чата:', userId, '→', partnerId);
+  
   if (!userId || !partnerId) {
     return res.status(400).json({ error: 'Не указаны userId или partnerId' });
   }
@@ -216,15 +233,19 @@ app.post('/api/chats', async (req, res) => {
       'INSERT INTO chats (id, user_id, partner_id) VALUES ($1, $2, $3)',
       [chatId + '_mirror', partnerId, userId]
     );
+    console.log('✅ Чат создан:', chatId);
     res.json({ success: true, chatId });
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка создания чата:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 6. ОТПРАВИТЬ СООБЩЕНИЕ
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
+  console.log('📨 Отправка сообщения:', { chatId, fromUserId, text: text?.substring(0, 30) });
+  
   if (!chatId || !fromUserId || !text) {
     return res.status(400).json({ error: 'Не все поля заполнены' });
   }
@@ -238,13 +259,15 @@ app.post('/api/messages', async (req, res) => {
       'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [chatId]
     );
+    console.log('✅ Сообщение сохранено');
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка отправки сообщения:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 7. УДАЛИТЬ ЧАТ
 app.delete('/api/chats', async (req, res) => {
   const { userId, chatId } = req.body;
   if (!userId || !chatId) {
@@ -254,19 +277,24 @@ app.delete('/api/chats', async (req, res) => {
     await pool.query('DELETE FROM chats WHERE user_id = $1 AND id = $2', [userId, chatId]);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка удаления чата:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 8. СДЕЛАТЬ АДМИНОМ
 app.post('/api/admin/make', async (req, res) => {
   const { userId, adminId } = req.body;
+  console.log('👑 Назначение админа:', userId, 'админ:', adminId);
+  
   try {
     const admin = await getUserById(adminId);
     if (!admin || !admin.is_admin) {
+      console.log('❌ Нет прав у:', adminId);
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
     await pool.query('UPDATE users SET is_admin = true WHERE id = $1', [userId]);
+    console.log('✅ Пользователь назначен админом:', userId);
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
@@ -274,28 +302,49 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
+// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ (АДМИН)
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
+  console.log('🗑️ Удаление пользователя:', userId, 'админ:', adminId);
+  
+  if (!userId || !adminId) {
+    return res.status(400).json({ error: 'Не указаны userId или adminId' });
+  }
+  
   try {
     const admin = await getUserById(adminId);
     if (!admin || !admin.is_admin) {
+      console.log('❌ Нет прав у:', adminId);
       return res.status(403).json({ error: 'Недостаточно прав' });
     }
+    
+    if (userId === adminId) {
+      return res.status(400).json({ error: 'Нельзя удалить самого себя' });
+    }
+    
+    // Удаляем сообщения
     await pool.query(
       'DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1 OR partner_id = $1)',
       [userId]
     );
+    // Удаляем чаты
     await pool.query('DELETE FROM chats WHERE user_id = $1 OR partner_id = $1', [userId]);
+    // Удаляем пользователя
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    
+    console.log('✅ Пользователь удален:', userId);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка:', error.message);
+    console.error('❌ Ошибка удаления:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
+// 10. УДАЛИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (АДМИН)
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
+  console.log('🗑️ Удаление всех пользователей, админ:', adminId);
+  
   try {
     const admin = await getUserById(adminId);
     if (!admin || !admin.is_admin) {
@@ -304,6 +353,7 @@ app.delete('/api/admin/users/all', async (req, res) => {
     await pool.query('DELETE FROM messages');
     await pool.query('DELETE FROM chats');
     await pool.query('DELETE FROM users');
+    console.log('✅ Все пользователи удалены');
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
@@ -311,6 +361,7 @@ app.delete('/api/admin/users/all', async (req, res) => {
   }
 });
 
+// 11. ПОЛУЧИТЬ ОДИН ЧАТ
 app.get('/api/chat', async (req, res) => {
   const chatId = req.query.chatId;
   const userId = req.query.userId;
@@ -335,6 +386,7 @@ app.get('/api/chat', async (req, res) => {
   }
 });
 
+// 12. HEALTH CHECK
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Сервер работает!' });
 });
