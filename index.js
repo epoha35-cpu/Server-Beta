@@ -1,6 +1,8 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const WebSocket = require('ws');
+const http = require('http');
 const path = require('path');
 require('dotenv').config();
 
@@ -19,6 +21,86 @@ const pool = new Pool({
 // ===== МИДЛВАРЫ =====
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname)));
+
+// ===== HTTP СЕРВЕР =====
+const server = http.createServer(app);
+
+// ===== WEBSOCKET СЕРВЕР =====
+const wss = new WebSocket.Server({ server });
+
+// Хранилище подключений: { userId: WebSocket }
+const clients = new Map();
+
+wss.on('connection', (ws) => {
+  console.log('🔌 Новое WebSocket-подключение');
+
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      console.log('📨 Получено WS-сообщение:', data);
+
+      if (data.type === 'auth') {
+        // Сохраняем userId для этого сокета
+        ws.userId = data.userId;
+        clients.set(data.userId, ws);
+        console.log(`✅ Пользователь ${data.userId} подключен к WebSocket`);
+      }
+
+      if (data.type === 'new_message') {
+        // Сохраняем сообщение в БД
+        const { chatId, fromUserId, text } = data;
+        const messageId = Date.now().toString(36);
+        
+        await pool.query(
+          'INSERT INTO messages (id, chat_id, from_user_id, text) VALUES ($1, $2, $3, $4)',
+          [messageId, chatId, fromUserId, text]
+        );
+        
+        await pool.query(
+          'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [chatId]
+        );
+
+        // Находим получателя чата
+        const chatResult = await pool.query(
+          'SELECT user_id, partner_id FROM chats WHERE id = $1',
+          [chatId]
+        );
+
+        if (chatResult.rows.length > 0) {
+          const chat = chatResult.rows[0];
+          // Определяем получателя (не отправителя)
+          const receiverId = chat.user_id === fromUserId ? chat.partner_id : chat.user_id;
+          
+          // Отправляем сообщение получателю через WebSocket
+          const receiverWs = clients.get(receiverId);
+          if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
+            receiverWs.send(JSON.stringify({
+              type: 'new_message',
+              chatId: chatId,
+              fromUserId: fromUserId,
+              text: text,
+              createdAt: new Date().toISOString()
+            }));
+            console.log(`📤 Сообщение отправлено пользователю ${receiverId}`);
+          } else {
+            console.log(`⚠️ Пользователь ${receiverId} не в сети`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Ошибка WebSocket:', error);
+    }
+  });
+
+  ws.on('close', () => {
+    if (ws.userId) {
+      clients.delete(ws.userId);
+      console.log(`🔌 Пользователь ${ws.userId} отключился`);
+    }
+  });
+});
 
 // ============================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -26,10 +108,6 @@ app.use(express.json());
 async function getUserById(id) {
   const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
   return result.rows[0];
-}
-function renderMessages(chat) {
-    console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
-    console.log('📨 Сообщения:', chat.messages);
 }
 
 async function getChats(userId) {
@@ -235,12 +313,12 @@ app.post('/api/chats', async (req, res) => {
   }
 });
 
+// 6. ОТПРАВИТЬ СООБЩЕНИЕ (HTTP, для обратной совместимости)
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
-  console.log('📨 ОТПРАВКА СООБЩЕНИЯ:', { chatId, fromUserId, text });
+  console.log('📨 HTTP отправка:', { chatId, fromUserId, text: text?.substring(0, 30) });
   
   if (!chatId || !fromUserId || !text) {
-    console.log('❌ Ошибка: не все поля заполнены');
     return res.status(400).json({ error: 'Не все поля заполнены' });
   }
   try {
@@ -253,7 +331,6 @@ app.post('/api/messages', async (req, res) => {
       'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [chatId]
     );
-    console.log('✅ СООБЩЕНИЕ СОХРАНЕНО!');
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка отправки сообщения:', error.message);
@@ -300,7 +377,7 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
-// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ (АДМИН)
+// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
@@ -321,7 +398,7 @@ app.delete('/api/admin/users', async (req, res) => {
   }
 });
 
-// 10. УДАЛИТЬ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (АДМИН)
+// 10. УДАЛИТЬ ВСЕХ
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
   try {
@@ -344,16 +421,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Сервер работает!' });
 });
 
-// ============================================
-// СТАТИЧЕСКИЕ ФАЙЛЫ (ПОСЛЕ ВСЕХ API!)
-// ============================================
-app.use(express.static(path.join(__dirname)));
-
-// ============================================
-// ЗАПУСК
-// ============================================
-app.listen(port, async () => {
+// ===== ЗАПУСК =====
+server.listen(port, async () => {
   console.log(`🚀 Сервер запущен на порту ${port}`);
+  console.log(`🔌 WebSocket доступен по адресу: ws://localhost:${port}`);
   await initDatabase();
   console.log(`✅ Сервер полностью готов!`);
   console.log(`🌐 Открой: http://localhost:${port}`);
