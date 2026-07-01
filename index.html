@@ -202,7 +202,8 @@
         async function apiRequest(endpoint, method = 'GET', data = null) {
             const options = {
                 method,
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store'
             };
             if (data) options.body = JSON.stringify(data);
 
@@ -385,7 +386,12 @@
 
         function renderMessages(chat) {
             console.log('🔄 ОТОБРАЖЕНИЕ СООБЩЕНИЙ:', chat);
-            console.log('📨 Сообщения:', chat.messages);
+            
+            if (!chat) {
+                messagesContainer.innerHTML = '<div class="empty-chat">Чат не найден</div>';
+                return;
+            }
+            
             const partner = chat.partner_name || chat.partner_id;
             chatPartnerName.textContent = partner + (chat.partner_is_admin ? ' ⭐' : '');
             chatPartnerId.textContent = '@' + chat.partner_id;
@@ -401,6 +407,8 @@
                 return;
             }
 
+            console.log('📨 Количество сообщений:', chat.messages.length);
+            
             chat.messages.forEach(msg => {
                 const div = document.createElement('div');
                 div.className = 'msg' + (msg.from_user_id === currentUser.id ? ' self' : '');
@@ -425,45 +433,41 @@
         }
 
         // ============================================
-        // ОТПРАВКА СООБЩЕНИЯ
+        // ОТПРАВКА СООБЩЕНИЯ (ИСПРАВЛЕННАЯ!)
         // ============================================
         async function sendMessage() {
-    const text = messageInput.value.trim();
-    if (!text || !currentUser || !activeChatId) return;
+            const text = messageInput.value.trim();
+            if (!text || !currentUser || !activeChatId) return;
 
-    try {
-        // Отправляем сообщение
-        await apiRequest('/messages', 'POST', {
-            chatId: activeChatId,
-            fromUserId: currentUser.id,
-            text: text
-        });
+            try {
+                console.log('📤 Отправка сообщения:', { chatId: activeChatId, fromUserId: currentUser.id, text });
+                
+                await apiRequest('/messages', 'POST', {
+                    chatId: activeChatId,
+                    fromUserId: currentUser.id,
+                    text: text
+                });
 
-        // Очищаем поле
-        messageInput.value = '';
+                messageInput.value = '';
+                
+                // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ЧАТ
+                await loadChats();
+                
+                // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ
+                const updatedChat = chats.find(c => c.id === activeChatId);
+                if (updatedChat) {
+                    renderMessages(updatedChat);
+                }
+                
+                setTimeout(() => {
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }, 100);
 
-        // Загружаем чаты заново
-        await loadChats();
-
-        // НАХОДИМ ОБНОВЛЁННЫЙ ЧАТ И ПОКАЗЫВАЕМ ЕГО
-        const updatedChat = chats.find(c => c.id === activeChatId);
-        if (updatedChat) {
-            renderMessages(updatedChat);
-        } else if (chats.length > 0) {
-            activeChatId = chats[0].id;
-            renderMessages(chats[0]);
+            } catch (error) {
+                console.error('Ошибка отправки:', error);
+                alert('Не удалось отправить сообщение');
+            }
         }
-
-        // Прокручиваем вниз
-        setTimeout(() => {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }, 100);
-
-    } catch (error) {
-        console.error('Ошибка отправки:', error);
-        alert('Не удалось отправить сообщение');
-    }
-}
 
         // ============================================
         // СОЗДАНИЕ ЧАТА
