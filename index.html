@@ -9,7 +9,7 @@
 <body>
     <div class="app" id="app">
 
-        <!-- ЭКРАН АВТОРИЗАЦИИ -->
+        <!-- ===== ЭКРАН АВТОРИЗАЦИИ ===== -->
         <div class="auth-screen" id="authScreen">
             <div class="auth-card">
                 <h2 id="authTitle">Добро пожаловать</h2>
@@ -24,7 +24,7 @@
             </div>
         </div>
 
-        <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
+        <!-- ===== ОСНОВНОЙ ИНТЕРФЕЙС ===== -->
         <div class="main" id="mainApp" style="display: none;">
             <!-- Левая панель -->
             <div class="sidebar">
@@ -66,7 +66,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛКА СОЗДАНИЯ ЧАТА -->
+    <!-- ===== МОДАЛКА СОЗДАНИЯ ЧАТА ===== -->
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
             <h3>Новый чат</h3>
@@ -79,10 +79,10 @@
         </div>
     </div>
 
-    <!-- КОНТЕКСТНОЕ МЕНЮ -->
+    <!-- ===== КОНТЕКСТНОЕ МЕНЮ ===== -->
     <div class="context-menu" id="contextMenu">
-        <div class="menu-item" id="menuLogout">
-            <span class="icon">🚪</span> Выйти из аккаунта
+        <div class="menu-item" id="menuSettings">
+            <span class="icon">⚙️</span> Настройки
         </div>
         <div class="menu-item admin" id="menuAdmin">
             <span class="icon">👑</span> Админ-панель
@@ -90,9 +90,37 @@
         <div class="menu-item danger" id="menuDeleteChat">
             <span class="icon">🗑️</span> Удалить чат
         </div>
+        <div class="menu-item danger" id="menuLogout">
+            <span class="icon">🚪</span> Выйти из аккаунта
+        </div>
     </div>
 
-    <!-- МОДАЛКА АДМИН-ПАНЕЛИ -->
+    <!-- ===== МОДАЛКА НАСТРОЕК ===== -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <h3>⚙️ Настройки</h3>
+            <div id="settingsMessage"></div>
+            <div class="setting-row">
+                <span class="setting-label">🌐 Язык</span>
+                <select id="settingsLanguage">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">🎨 Тема</span>
+                <select id="settingsTheme">
+                    <option value="dark">🌙 Тёмная</option>
+                    <option value="light">☀️ Светлая</option>
+                </select>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+                <button class="cancel" id="settingsCloseBtn">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== МОДАЛКА АДМИН-ПАНЕЛИ ===== -->
     <div class="modal-overlay" id="adminModal">
         <div class="modal">
             <h3>👑 Админ-панель</h3>
@@ -113,7 +141,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛКА ВВОДА АДМИН-КОДА -->
+    <!-- ===== МОДАЛКА ВВОДА АДМИН-КОДА ===== -->
     <div class="modal-overlay" id="adminCodeModal">
         <div class="modal">
             <h3>🔐 Введите админ-код</h3>
@@ -131,10 +159,67 @@
         // НАСТРОЙКИ
         // ============================================
         const ADMIN_CODE = 'admin123';
-        // Определяем URL для API (если локально - localhost, если на сервере - текущий домен)
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000/api' 
-            : '/api';
+        const API_URL = '';
+
+        // ============================================
+        // ПЕРЕВОДЫ
+        // ============================================
+        const translations = {
+            ru: {
+                addChat: '➕ Добавить чат',
+                newChat: 'Новый чат',
+                enterUserId: 'Введите ID пользователя',
+                cancel: 'Отмена',
+                create: 'Создать',
+                settings: '⚙️ Настройки',
+                logout: 'Выйти из аккаунта',
+                adminPanel: 'Админ-панель',
+                deleteChat: 'Удалить чат',
+                noChats: 'Нет чатов',
+                noMessages: 'Нет сообщений',
+                selectChat: 'Выберите чат',
+                startDialog: '👋 Начните диалог',
+                online: 'В сети',
+                enterMessage: 'Введите сообщение...',
+                send: 'Отправить',
+                language: '🌐 Язык',
+                theme: '🎨 Тема',
+                dark: '🌙 Тёмная',
+                light: '☀️ Светлая',
+                close: 'Закрыть',
+                dangerZone: 'Опасная зона',
+                deleteAllUsers: 'Удалить ВСЕХ пользователей',
+                deleteAllHint: 'Это действие удалит все аккаунты и все чаты. Необратимо!',
+                usersList: 'Существующие пользователи'
+            },
+            en: {
+                addChat: '➕ Add Chat',
+                newChat: 'New Chat',
+                enterUserId: 'Enter user ID',
+                cancel: 'Cancel',
+                create: 'Create',
+                settings: '⚙️ Settings',
+                logout: 'Logout',
+                adminPanel: 'Admin Panel',
+                deleteChat: 'Delete Chat',
+                noChats: 'No chats',
+                noMessages: 'No messages',
+                selectChat: 'Select a chat',
+                startDialog: '👋 Start a conversation',
+                online: 'Online',
+                enterMessage: 'Enter message...',
+                send: 'Send',
+                language: '🌐 Language',
+                theme: '🎨 Theme',
+                dark: '🌙 Dark',
+                light: '☀️ Light',
+                close: 'Close',
+                dangerZone: 'Danger Zone',
+                deleteAllUsers: 'Delete ALL users',
+                deleteAllHint: 'This will delete all accounts and all chats. Irreversible!',
+                usersList: 'Existing users'
+            }
+        };
 
         // ============================================
         // СОСТОЯНИЕ
@@ -145,6 +230,9 @@
         let isLoginMode = true;
         let isAdmin = false;
         let updateInterval = null;
+        let currentLang = localStorage.getItem('messenger_lang') || 'ru';
+        let currentTheme = localStorage.getItem('messenger_theme') || 'dark';
+        let contextChatId = null;
 
         // ============================================
         // DOM ЭЛЕМЕНТЫ
@@ -181,6 +269,11 @@
         const modalCancel = document.getElementById('modalCancel');
         const modalSubmit = document.getElementById('modalSubmit');
 
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+        const settingsLanguage = document.getElementById('settingsLanguage');
+        const settingsTheme = document.getElementById('settingsTheme');
+
         const adminModal = document.getElementById('adminModal');
         const adminMessage = document.getElementById('adminMessage');
         const adminUserList = document.getElementById('adminUserList');
@@ -195,8 +288,48 @@
 
         const contextMenu = document.getElementById('contextMenu');
         const menuLogout = document.getElementById('menuLogout');
+        const menuSettings = document.getElementById('menuSettings');
         const menuAdmin = document.getElementById('menuAdmin');
         const menuDeleteChat = document.getElementById('menuDeleteChat');
+
+        // ============================================
+        // ФУНКЦИИ ПЕРЕВОДА
+        // ============================================
+        function t(key) {
+            return translations[currentLang]?.[key] || translations.ru[key] || key;
+        }
+
+        function updateUIStrings() {
+            addChatBtn.textContent = t('addChat');
+            modalUserId.placeholder = t('enterUserId');
+            modalCancel.textContent = t('cancel');
+            modalSubmit.textContent = t('create');
+            messageInput.placeholder = t('enterMessage');
+            sendMsgBtn.textContent = t('send');
+            adminCloseBtn.textContent = t('close');
+            settingsCloseBtn.textContent = t('close');
+            document.querySelector('#settingsModal h3').textContent = t('settings');
+            document.querySelector('#adminModal h3').textContent = '👑 ' + t('adminPanel');
+            document.querySelector('#adminModal h4').textContent = t('dangerZone');
+            document.getElementById('adminDeleteAllText')?.remove();
+            // Создаем кнопку с текстом
+            deleteAllUsersBtn.textContent = '🗑️ ' + t('deleteAllUsers');
+            const hint = document.querySelector('#adminModal .hint');
+            if (hint) hint.textContent = t('deleteAllHint');
+        }
+
+        // ============================================
+        // ТЕМА
+        // ============================================
+        function updateTheme() {
+            if (currentTheme === 'light') {
+                document.body.classList.add('light-theme');
+            } else {
+                document.body.classList.remove('light-theme');
+            }
+            localStorage.setItem('messenger_theme', currentTheme);
+            settingsTheme.value = currentTheme;
+        }
 
         // ============================================
         // ФУНКЦИИ API
@@ -307,6 +440,7 @@
 
             userNameDisplay.textContent = currentUser.name;
             userIdDisplay.textContent = '@' + currentUser.id;
+            updateUIStrings();
         }
 
         // ============================================
@@ -347,7 +481,7 @@
             chatList.innerHTML = '';
 
             if (!chats || chats.length === 0) {
-                chatList.innerHTML = '<div style="color:#7b8799; padding:12px; text-align:center; font-size:14px;">Нет чатов</div>';
+                chatList.innerHTML = `<div style="color:#7b8799; padding:12px; text-align:center; font-size:14px;">${t('noChats')}</div>`;
                 return;
             }
 
@@ -377,7 +511,8 @@
                 div.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    showContextMenu(e.clientX, e.clientY, 'chat', chat.id);
+                    contextChatId = chat.id;
+                    showContextMenu(e.clientX, e.clientY, 'chat');
                 });
 
                 chatList.appendChild(div);
@@ -394,7 +529,7 @@
             messagesContainer.innerHTML = '';
 
             if (!chat.messages || chat.messages.length === 0) {
-                messagesContainer.innerHTML = '<div class="empty-chat">Нет сообщений</div>';
+                messagesContainer.innerHTML = `<div class="empty-chat">${t('noMessages')}</div>`;
                 messageInput.disabled = false;
                 sendMsgBtn.disabled = false;
                 return;
@@ -414,8 +549,8 @@
         }
 
         function showEmptyState() {
-            messagesContainer.innerHTML = '<div class="empty-chat">👋 Начните диалог</div>';
-            chatPartnerName.textContent = 'Выберите чат';
+            messagesContainer.innerHTML = `<div class="empty-chat">${t('startDialog')}</div>`;
+            chatPartnerName.textContent = t('selectChat');
             chatPartnerId.textContent = '';
             chatAvatar.textContent = '?';
             chatAvatar.style.backgroundColor = '#4a5a7a';
@@ -537,7 +672,7 @@
                             <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background-color:${user.color || '#6c8cff'};margin-left:8px;"></span>
                         </div>
                         ${user.id !== currentUser.id ? 
-                            `<button onclick="deleteUser('${user.id}')" style="color:#ff6b6b;background:none;border:none;cursor:pointer;font-size:16px;">✕</button>` : 
+                            `<button onclick="window.deleteUser('${user.id}')" style="color:#ff6b6b;background:none;border:none;cursor:pointer;font-size:16px;">✕</button>` : 
                             '<span style="color:#6fcf97;font-size:12px;">(вы)</span>'
                         }
                     `;
@@ -547,10 +682,12 @@
                 adminModal.classList.add('show');
             } catch (error) {
                 console.error('Ошибка загрузки пользователей:', error);
+                showAdminMessage('Ошибка загрузки пользователей', 'error');
             }
         }
 
-        async function deleteUser(userId) {
+        // Функция удаления пользователя (доступна глобально для onclick)
+        window.deleteUser = async function(userId) {
             if (!confirm('Удалить пользователя?')) return;
 
             try {
@@ -564,7 +701,7 @@
             } catch (error) {
                 showAdminMessage(error.message, 'error');
             }
-        }
+        };
 
         async function deleteAllUsers() {
             if (!confirm('⚠️ Удалить ВСЕХ пользователей?')) return;
@@ -591,20 +728,16 @@
         // ============================================
         // КОНТЕКСТНОЕ МЕНЮ
         // ============================================
-        let contextTarget = null;
-        let contextChatId = null;
-
-        function showContextMenu(x, y, target, chatId = null) {
-            contextTarget = target;
-            contextChatId = chatId;
-
+        function showContextMenu(x, y, target) {
             if (target === 'user') {
                 menuDeleteChat.style.display = 'none';
                 menuLogout.style.display = 'flex';
+                menuSettings.style.display = 'flex';
                 menuAdmin.style.display = 'flex';
             } else if (target === 'chat') {
                 menuDeleteChat.style.display = 'flex';
                 menuLogout.style.display = 'none';
+                menuSettings.style.display = 'none';
                 menuAdmin.style.display = 'none';
             }
 
@@ -654,11 +787,31 @@
             showContextMenu(e.clientX, e.clientY, 'user');
         });
 
+        // Пункты контекстного меню
         menuLogout.addEventListener('click', logout);
-        menuDeleteChat.addEventListener('click', () => {
-            if (contextChatId) {
-                deleteChat(contextChatId);
+        menuSettings.addEventListener('click', () => {
+            hideContextMenu();
+            settingsModal.classList.add('show');
+            settingsLanguage.value = currentLang;
+            settingsTheme.value = currentTheme;
+        });
+        settingsCloseBtn.addEventListener('click', () => settingsModal.classList.remove('show'));
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) settingsModal.classList.remove('show');
+        });
+        settingsLanguage.addEventListener('change', () => {
+            currentLang = settingsLanguage.value;
+            localStorage.setItem('messenger_lang', currentLang);
+            updateUIStrings();
+            renderChatList();
+            if (activeChatId) {
+                const chat = chats.find(c => c.id === activeChatId);
+                if (chat) renderMessages(chat);
             }
+        });
+        settingsTheme.addEventListener('change', () => {
+            currentTheme = settingsTheme.value;
+            updateTheme();
         });
 
         // Админ-панель
@@ -677,12 +830,12 @@
             const code = adminCodeInput.value.trim();
             if (code === ADMIN_CODE) {
                 adminCodeModal.classList.remove('show');
-                isAdmin = true;
                 try {
                     await apiRequest('/admin/make', 'POST', {
                         userId: currentUser.id,
                         adminId: currentUser.id
                     });
+                    isAdmin = true;
                     adminStar.style.display = 'flex';
                     adminBadge.style.display = 'inline';
                     showAdminPanel();
@@ -708,6 +861,13 @@
         });
         deleteAllUsersBtn.addEventListener('click', deleteAllUsers);
 
+        // Удаление чата из контекстного меню
+        menuDeleteChat.addEventListener('click', () => {
+            if (contextChatId) {
+                deleteChat(contextChatId);
+            }
+        });
+
         // Скрытие меню
         document.addEventListener('click', (e) => {
             if (!contextMenu.contains(e.target)) {
@@ -722,6 +882,12 @@
         // ИНИЦИАЛИЗАЦИЯ
         // ============================================
         async function init() {
+            // Применяем тему и язык
+            settingsLanguage.value = currentLang;
+            settingsTheme.value = currentTheme;
+            updateTheme();
+            updateUIStrings();
+
             const savedUser = localStorage.getItem('messenger_user');
             if (savedUser) {
                 try {
@@ -754,6 +920,7 @@
             authError.style.display = 'none';
         }
 
+        // Запуск
         init();
     </script>
 </body>
