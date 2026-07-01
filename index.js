@@ -231,10 +231,12 @@ app.post('/api/chats', async (req, res) => {
   }
 });
 
-// 6. ОТПРАВИТЬ СООБЩЕНИЕ
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
+  console.log('📨 ОТПРАВКА СООБЩЕНИЯ:', { chatId, fromUserId, text });
+  
   if (!chatId || !fromUserId || !text) {
+    console.log('❌ Ошибка: не все поля заполнены');
     return res.status(400).json({ error: 'Не все поля заполнены' });
   }
   try {
@@ -247,6 +249,7 @@ app.post('/api/messages', async (req, res) => {
       'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
       [chatId]
     );
+    console.log('✅ СООБЩЕНИЕ СОХРАНЕНО!');
     res.json({ success: true });
   } catch (error) {
     console.error('❌ Ошибка отправки сообщения:', error.message);
