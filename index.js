@@ -40,28 +40,38 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(message);
       console.log('📨 Получено WS-сообщение:', data);
 
+      // ===== АВТОРИЗАЦИЯ WEBSOCKET =====
       if (data.type === 'auth') {
         ws.userId = data.userId;
         clients.set(data.userId, ws);
         console.log(`✅ Пользователь ${data.userId} подключен к WebSocket`);
+        return;
       }
 
+      // ===== НОВОЕ СООБЩЕНИЕ =====
       if (data.type === 'new_message') {
         const { chatId, fromUserId, text } = data;
-        const messageId = Date.now().toString(36);
+        console.log(`📨 Новое сообщение от ${fromUserId} в чат ${chatId}: ${text}`);
         
-        // Сохраняем в БД
+        if (!chatId || !fromUserId || !text) {
+          console.log('❌ Ошибка: не все поля заполнены');
+          return;
+        }
+
+        // 1. Сохраняем сообщение в БД
+        const messageId = Date.now().toString(36);
         await pool.query(
           'INSERT INTO messages (id, chat_id, from_user_id, text) VALUES ($1, $2, $3, $4)',
           [messageId, chatId, fromUserId, text]
         );
         
+        // 2. Обновляем время чата
         await pool.query(
           'UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
           [chatId]
         );
 
-        // Находим получателя
+        // 3. Находим получателя
         const chatResult = await pool.query(
           'SELECT user_id, partner_id FROM chats WHERE id = $1',
           [chatId]
@@ -69,9 +79,11 @@ wss.on('connection', (ws) => {
 
         if (chatResult.rows.length > 0) {
           const chat = chatResult.rows[0];
+          // Определяем получателя (НЕ отправителя)
           const receiverId = chat.user_id === fromUserId ? chat.partner_id : chat.user_id;
+          console.log(`📤 Отправляем сообщение получателю: ${receiverId}`);
           
-          // Отправляем сообщение получателю
+          // 4. Отправляем сообщение ТОЛЬКО получателю
           const receiverWs = clients.get(receiverId);
           if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
             receiverWs.send(JSON.stringify({
@@ -81,14 +93,21 @@ wss.on('connection', (ws) => {
               text: text,
               createdAt: new Date().toISOString()
             }));
-            console.log(`📤 Сообщение отправлено пользователю ${receiverId}`);
+            console.log(`✅ Сообщение отправлено пользователю ${receiverId}`);
+          } else {
+            console.log(`⚠️ Пользователь ${receiverId} не в сети`);
           }
+        } else {
+          console.log(`❌ Чат ${chatId} не найден`);
         }
+        return;
       }
 
+      // ===== НОВЫЙ ЧАТ =====
       if (data.type === 'new_chat') {
-        // Новый чат создан — уведомляем второго пользователя
         const { userId, partnerId, chatId } = data;
+        console.log(`📨 Новый чат: ${userId} ↔ ${partnerId}`);
+        
         const partnerWs = clients.get(partnerId);
         if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
           partnerWs.send(JSON.stringify({
@@ -96,9 +115,13 @@ wss.on('connection', (ws) => {
             chatId: chatId,
             partnerId: userId
           }));
-          console.log(`📤 Уведомление о новом чате отправлено пользователю ${partnerId}`);
+          console.log(`✅ Уведомление о новом чате отправлено ${partnerId}`);
+        } else {
+          console.log(`⚠️ Пользователь ${partnerId} не в сети`);
         }
+        return;
       }
+
     } catch (error) {
       console.error('❌ Ошибка WebSocket:', error);
     }
@@ -109,6 +132,10 @@ wss.on('connection', (ws) => {
       clients.delete(ws.userId);
       console.log(`🔌 Пользователь ${ws.userId} отключился`);
     }
+  });
+
+  ws.on('error', (error) => {
+    console.error('❌ WebSocket ошибка:', error);
   });
 });
 
@@ -198,7 +225,7 @@ async function initDatabase() {
 }
 
 // ============================================
-// API ЭНДПОИНТЫ
+// API ЭНДПОИНТЫ (ТОЛЬКО ДЛЯ HTTP)
 // ============================================
 
 // 1. РЕГИСТРАЦИЯ
@@ -317,10 +344,11 @@ app.post('/api/chats', async (req, res) => {
       [chatId, userId, partnerId]
     );
     
-    // Создаём чат для второго пользователя
+    // Создаём зеркальный чат для второго пользователя
+    const mirrorChatId = chatId + '_mirror';
     await pool.query(
       'INSERT INTO chats (id, user_id, partner_id) VALUES ($1, $2, $3)',
-      [chatId + '_mirror', partnerId, userId]
+      [mirrorChatId, partnerId, userId]
     );
     
     // Уведомляем второго пользователя через WebSocket
@@ -328,10 +356,12 @@ app.post('/api/chats', async (req, res) => {
     if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
       partnerWs.send(JSON.stringify({
         type: 'new_chat',
-        chatId: chatId + '_mirror',
+        chatId: mirrorChatId,
         partnerId: userId
       }));
-      console.log(`📤 Уведомление о новом чате отправлено пользователю ${partnerId}`);
+      console.log(`✅ Уведомление о новом чате отправлено ${partnerId}`);
+    } else {
+      console.log(`⚠️ Пользователь ${partnerId} не в сети, чат будет доступен после перезагрузки`);
     }
     
     console.log('✅ Чат создан:', chatId);
@@ -342,10 +372,10 @@ app.post('/api/chats', async (req, res) => {
   }
 });
 
-// 6. ОТПРАВИТЬ СООБЩЕНИЕ (ЧЕРЕЗ HTTP, ТОЛЬКО ДЛЯ СОХРАНЕНИЯ)
+// 6. СОХРАНИТЬ СООБЩЕНИЕ (HTTP — ЗАПАСНОЙ ВАРИАНТ)
 app.post('/api/messages', async (req, res) => {
   const { chatId, fromUserId, text } = req.body;
-  console.log('📨 HTTP сохранение:', { chatId, fromUserId, text: text?.substring(0, 30) });
+  console.log('📨 HTTP сохранение (запасной вариант):', { chatId, fromUserId, text: text?.substring(0, 30) });
   
   if (!chatId || !fromUserId || !text) {
     return res.status(400).json({ error: 'Не все поля заполнены' });
@@ -362,7 +392,7 @@ app.post('/api/messages', async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Ошибка отправки сообщения:', error.message);
+    console.error('❌ Ошибка сохранения сообщения:', error.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -406,7 +436,7 @@ app.post('/api/admin/make', async (req, res) => {
   }
 });
 
-// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ
+// 9. УДАЛИТЬ ПОЛЬЗОВАТЕЛЯ (АДМИН)
 app.delete('/api/admin/users', async (req, res) => {
   const { userId, adminId } = req.body;
   try {
@@ -427,7 +457,7 @@ app.delete('/api/admin/users', async (req, res) => {
   }
 });
 
-// 10. УДАЛИТЬ ВСЕХ
+// 10. УДАЛИТЬ ВСЕХ (АДМИН)
 app.delete('/api/admin/users/all', async (req, res) => {
   const { adminId } = req.body;
   try {
